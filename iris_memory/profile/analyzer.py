@@ -148,6 +148,9 @@ class ProfileAnalyzer:
         """
 
         allowed_ids = {str(item.get("id", "")) for item in users}
+        # 既没有群画像也没有用户画像要更新时，直接返回，不浪费一次 LLM 调用（#33）
+        if not group and not allowed_ids:
+            return {"group": {}, "users": {}}
         max_chars = _get_max_chars()
         try:
             per_user_messages = max(
@@ -185,6 +188,19 @@ class ProfileAnalyzer:
                 }
             )
 
+        # users 为空时不拼接 users 模板，避免模型照抄「原样用户ID」占位符（#33）
+        users_block = ""
+        if allowed_ids:
+            users_block = """,
+  "users": {
+    "<输入中的用户id>": {
+      "personality_tags": [], "interests": [], "occupation": "", "language_style": "",
+      "communication_style": "", "emotional_baseline": "", "favorability_delta": 0,
+      "bot_relationship": "", "important_dates": [], "taboo_topics": [],
+      "important_events": [], "custom_fields": {}
+    }
+  }"""
+
         prompt = f"""批量分析群聊与用户画像。输入中的 id 是唯一合法主体，严禁新增、改写或猜测 id。
 tier=mid 只更新中期字段，tier=long 只更新长期字段，tier=combined 可同时更新。
 
@@ -193,15 +209,7 @@ tier=mid 只更新中期字段，tier=long 只更新长期字段，tier=combined
 
 仅返回以下 JSON：
 {{
-  "group": {{"interests": [], "atmosphere_tags": [], "long_term_tags": [], "blacklist_topics": [], "custom_fields": {{}}}} 或 null,
-  "users": {{
-    "原样用户ID": {{
-      "personality_tags": [], "interests": [], "occupation": "", "language_style": "",
-      "communication_style": "", "emotional_baseline": "", "favorability_delta": 0,
-      "bot_relationship": "", "important_dates": [], "taboo_topics": [],
-      "important_events": [], "custom_fields": {{}}
-    }}
-  }}
+  "group": {{"interests": [], "atmosphere_tags": [], "long_term_tags": [], "blacklist_topics": [], "custom_fields": {{}}}} 或 null{users_block}
 }}
 不确定的字段返回空值；users 只能包含输入中给出的 id。"""
 
@@ -222,7 +230,11 @@ tier=mid 只更新中期字段，tier=long 只更新长期字段，tier=combined
                 "users": safe_users,
             }
         except Exception as e:
-            logger.error(f"批量画像分析失败: {e}")
+            # 补全异常类型与栈，便于定位（#33）
+            logger.error(
+                f"批量画像分析失败: {type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
             return {}
 
     def _build_group_analysis_prompt(

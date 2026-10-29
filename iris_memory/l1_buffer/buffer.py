@@ -725,21 +725,28 @@ class L1Buffer(Component):
                     group=group_spec if index == 0 else None,
                     users=prompt_users,
                 )
+                # 输入里本来就没有可更新对象时（例如私聊场景 users 为空），
+                # 模型返回空结构是合法的，不应判为失败重试（#33）
+                has_targets = bool(group_spec and index == 0) or bool(chunk)
                 if not result:
-                    if raise_errors:
+                    if raise_errors and has_targets:
                         raise RuntimeError("批量画像分析返回无效 JSON")
                     continue
                 if index == 0 and group_spec:
                     group_result = result.get("group", {})
-                    if not group_result and raise_errors:
-                        raise RuntimeError("批量画像结果缺少 group")
-                    await self._apply_group_batch_result(
-                        group_id,
-                        group_tier,
-                        group_result,
-                        group_manager,
-                        persona_id,
-                    )
+                    if not group_result:
+                        # group 缺失但本次仍要更新用户画像时继续处理 users，
+                        # 仅在没有用户可更新时才算失败（#33）
+                        if raise_errors and not chunk:
+                            raise RuntimeError("批量画像结果缺少 group")
+                    else:
+                        await self._apply_group_batch_result(
+                            group_id,
+                            group_tier,
+                            group_result,
+                            group_manager,
+                            persona_id,
+                        )
                 user_results = result.get("users", {})
                 expected_ids = {str(spec["id"]) for spec in chunk}
                 if raise_errors and not expected_ids.issubset(user_results):

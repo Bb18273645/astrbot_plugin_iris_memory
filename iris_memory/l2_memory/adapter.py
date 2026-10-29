@@ -752,7 +752,8 @@ class L2MemoryAdapter(Component):
         import asyncio
 
         provider_id = config.get("l2_memory.embedding_provider", "")
-        max_retries = 5
+        # 冷启动时 Provider 可能尚未注册，重试窗口需覆盖整个启动期（#28）
+        max_retries = 12
         base_interval = 2.0
 
         for attempt in range(1, max_retries + 1):
@@ -760,20 +761,20 @@ class L2MemoryAdapter(Component):
 
             if provider_id:
                 provider = self._get_embedding_provider_by_id(provider_id)
-                if not provider and attempt == 1:
-                    logger.warning(
-                        f"指定的 Embedding Provider '{provider_id}' 不可用，"
-                        f"请检查 ID 是否正确"
-                    )
 
             if not provider:
                 provider = self._get_first_embedding_provider()
+                # 回退成功时回填真实 id，供嵌入签名使用（#32）
+                if provider:
+                    resolved = getattr(provider, "provider_config", {})
+                    if isinstance(resolved, dict) and resolved.get("id"):
+                        provider_id = resolved["id"]
 
             if provider:
                 break
 
             if attempt < max_retries:
-                delay = min(base_interval * (2 ** (attempt - 1)), 16.0)
+                delay = min(base_interval * (2 ** (attempt - 1)), 30.0)
                 logger.info(
                     f"Embedding Provider 未就绪，"
                     f"{delay:.0f}s 后重试 ({attempt}/{max_retries})"
@@ -802,7 +803,14 @@ class L2MemoryAdapter(Component):
         )
 
         self._embedding_provider = provider
-        self._actual_embedding_model = f"provider:{provider_id}/{model_name}"
+        # 用实际解析到的 provider id 生成签名，避免配置留空时退化成
+        # provider:/model，导致「空 <-> 显式」切换误触发全量重嵌入（#32）
+        resolved_pid = (
+            getattr(provider, "provider_config", {}).get("id")
+            if isinstance(getattr(provider, "provider_config", {}), dict)
+            else None
+        ) or provider_id or "auto"
+        self._actual_embedding_model = f"provider:{resolved_pid}/{model_name}"
         self._embedding_dimensions = dim
 
     async def _init_local_embedding(self, config) -> None:
