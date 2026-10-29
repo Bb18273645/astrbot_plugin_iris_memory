@@ -34,6 +34,10 @@ logger = get_logger("l2_memory.adapter")
 IMPORTANCE_LEVEL_HIGH = 0.65
 IMPORTANCE_LEVEL_LOW = 0.35
 
+# 单次 Embedding 请求的最大文本条数。
+# DashScope 等厂商限制 batch size 不得超过 25，超出直接返回 HTTP 400（#27）。
+EMBED_BATCH_MAX = 25
+
 
 def importance_level_for(value: float) -> str:
     """重要度数值 → 档位文本（与 summarizer.importance_to_float 的三档映射对应）"""
@@ -954,7 +958,14 @@ class L2MemoryAdapter(Component):
         self._embedding_request_count += 1
         self._embedded_text_count += len(texts)
         if self._embedding_source == "provider" and self._embedding_provider:
-            vectors = await self._embedding_provider.get_embeddings(texts)
+            # DashScope 等厂商限制单次批量大小（上限 25），超出会直接 400（#27）。
+            # 这里统一按 EMBED_BATCH_MAX 切批，保证任意批量都能成功。
+            vectors: list[list[float]] = []
+            for start in range(0, len(texts), EMBED_BATCH_MAX):
+                chunk = texts[start : start + EMBED_BATCH_MAX]
+                vectors.extend(
+                    await self._embedding_provider.get_embeddings(chunk)
+                )
         elif self._local_model:
             loop = asyncio.get_event_loop()
             vectors = await loop.run_in_executor(
