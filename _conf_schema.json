@@ -278,6 +278,37 @@
       }
     }
   },
+  "identity": {
+    "type": "object",
+    "description": "用户身份归一化",
+    "hint": "部分平台适配器没有真实用户ID（内置 webchat 直接用显示名占位），会导致同一个人的画像被拆成多份。这里按映射把入口归到同一个人",
+    "items": {
+      "enable": {
+        "type": "bool",
+        "default": true,
+        "description": "启用用户身份归一化",
+        "hint": "关闭后完全按平台原始 user_id 分桶（保持旧行为）"
+      },
+      "user_id_aliases": {
+        "type": "string",
+        "default": "",
+        "description": "显示名到真实ID的映射（JSON）",
+        "hint": "例如 {\"柠 夏\": \"8495766039\"}。显示名可从画像管理页的重复条目里看到；留空表示不做映射"
+      },
+      "fallback_user_id": {
+        "type": "string",
+        "default": "",
+        "description": "兜底用户ID",
+        "hint": "未命中映射、且 user_id 明显是显示名（与昵称相同或不含数字）时使用的 ID。留空表示不改写，避免把不同用户并成一个人"
+      },
+      "only_when_no_digits": {
+        "type": "bool",
+        "default": true,
+        "description": "仅在 user_id 不含数字时才用兜底",
+        "hint": "防止误伤本来就有数字ID的平台（Telegram、QQ 等）"
+      }
+    }
+  },
   "scheduled_tasks": {
     "type": "object",
     "description": "梦境任务",

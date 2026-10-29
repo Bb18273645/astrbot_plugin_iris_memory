@@ -175,3 +175,50 @@ async def test_list_all_users_dedupes_legacy_empty_group():
     assert len(users) == 1
     assert users[0]["user_id"] == "u1"
     assert users[0]["group_id"] == "default"
+
+
+@pytest.mark.asyncio
+async def test_migrate_alias_profiles_merges_display_name(monkeypatch):
+    """显示名画像按 identity.user_id_aliases 并入真实 ID（#31）"""
+    from astrbot_plugin_iris_memory.iris_memory.profile import storage as storage_module
+
+    kv = FakeKV(
+        {
+            "user_profile:default:default:柠 夏": _user_dict("柠 夏", occupation="工程师"),
+            "user_profile:default:default:8495766039": _user_dict(
+                "8495766039", version=2
+            ),
+            "user_index:default:default": ["柠 夏", "8495766039"],
+            "user_group_index:default": ["default"],
+            "persona_index": ["default"],
+        }
+    )
+    storage = _storage(kv)
+    monkeypatch.setattr(
+        storage_module,
+        "get_config",
+        lambda: _FakeConfig(
+            {"identity.user_id_aliases": '{"柠 夏": "8495766039"}'}
+        ),
+    )
+
+    merged = await storage.migrate_alias_profiles()
+
+    assert merged == 1
+    assert "user_profile:default:default:柠 夏" not in kv.data
+    assert kv.data["user_profile:default:default:8495766039"]["occupation"] == "工程师"
+    assert kv.data["user_index:default:default"] == ["8495766039"]
+
+    # 幂等：再跑一次没有可合并项
+    assert await storage.migrate_alias_profiles() == 0
+
+
+@pytest.mark.asyncio
+async def test_migrate_alias_profiles_noop_without_aliases(monkeypatch):
+    from astrbot_plugin_iris_memory.iris_memory.profile import storage as storage_module
+
+    kv = FakeKV({"user_profile:default:default:u1": _user_dict("u1")})
+    storage = _storage(kv)
+    monkeypatch.setattr(storage_module, "get_config", lambda: _FakeConfig({}))
+
+    assert await storage.migrate_alias_profiles() == 0

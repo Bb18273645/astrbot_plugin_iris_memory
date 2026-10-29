@@ -73,6 +73,21 @@ class IsolationConfig:
 
 
 @dataclass
+class IdentityConfig:
+    """用户身份归一化配置
+
+    部分平台适配器没有真实 user_id（内置 webchat 用显示名占位），
+    这里按映射/兜底把画像归到同一个人（#31）。
+    """
+
+    enable: bool = True
+    # 显示名 -> 真实 ID 的映射，JSON 字符串（配置面板）或 dict（代码注入）
+    user_id_aliases: str = ""
+    fallback_user_id: str = ""
+    only_when_no_digits: bool = True
+
+
+@dataclass
 class ScheduledTasksConfig:
     """梦境任务配置"""
 
@@ -1213,6 +1228,7 @@ class Defaults:
     l3_kg: L3KGConfig = field(default_factory=L3KGConfig)
     profile: ProfileConfig = field(default_factory=ProfileConfig)
     isolation_config: IsolationConfig = field(default_factory=IsolationConfig)
+    identity: IdentityConfig = field(default_factory=IdentityConfig)
     scheduled_tasks: ScheduledTasksConfig = field(default_factory=ScheduledTasksConfig)
     context_control: ContextControlConfig = field(default_factory=ContextControlConfig)
     extras: ExtrasConfig = field(default_factory=ExtrasConfig)

@@ -178,6 +178,7 @@ class ProfileStorage(Component):
 
         try:
             await self.migrate_empty_group_keys()
+            await self.migrate_alias_profiles()
         except Exception as e:
             # 迁移失败不能阻断启动：新写入路径已归一化，旧键最多留着不影响读写
             logger.warning(f"画像键归一化迁移失败（不影响启动）：{e}")
@@ -667,6 +668,82 @@ class ProfileStorage(Component):
 
         if merged_count:
             logger.info(f"画像键归一化完成：合并 {merged_count} 条空 group 画像")
+        return merged_count
+
+    async def migrate_alias_profiles(self) -> int:
+        """按 ``identity.user_id_aliases`` 把旧画像并入目标 user_id（#31）
+
+        webchat 之类把显示名当 user_id 的平台，会在启用映射之前就写出
+        ``user_profile:{p}:default:柠 夏`` 这类记录。只改新写入路径不够，
+        旧记录会一直挂在画像列表里。这里在启动时按映射做一次合并：
+        显示名侧的字段并入真实 ID，删除旧键并从索引里摘掉。
+
+        幂等：映射中没有源 ID 时直接跳过。
+
+        Returns:
+            合并的画像条数
+        """
+        if not self._is_available:
+            return 0
+
+        try:
+            from ..identity import parse_aliases
+
+            aliases = parse_aliases(get_config().get("identity.user_id_aliases", ""))
+        except Exception as e:
+            logger.warning(f"读取身份映射失败，跳过画像别名合并：{e}")
+            return 0
+
+        if not aliases:
+            return 0
+
+        merged_count = 0
+        for persona_id in await self._get_known_personas():
+            ug_index_key = f"user_group_index:{persona_id}"
+            group_ids = list(
+                await self._storage.get_kv_data(ug_index_key, []) or []
+            )
+            if GLOBAL_GROUP_ID not in group_ids:
+                group_ids.append(GLOBAL_GROUP_ID)
+
+            for group_id in {self._effective_group(gid) for gid in group_ids}:
+                index_key = f"user_index:{persona_id}:{group_id}"
+                user_ids = list(await self._storage.get_kv_data(index_key, []) or [])
+                changed = False
+
+                for source_id, target_id in aliases.items():
+                    if source_id == target_id or source_id not in user_ids:
+                        continue
+
+                    source_key = (
+                        f"user_profile:{persona_id}:{group_id}:{source_id}"
+                    )
+                    target_key = (
+                        f"user_profile:{persona_id}:{group_id}:{target_id}"
+                    )
+                    source_data = await self._storage.get_kv_data(source_key, None)
+                    if not source_data:
+                        continue
+
+                    target_data = await self._storage.get_kv_data(target_key, None)
+                    await self._storage.put_kv_data(
+                        target_key,
+                        _merge_profile_dicts(target_data or {}, source_data),
+                    )
+                    await self._storage.delete_kv_data(source_key)
+
+                    user_ids = [uid for uid in user_ids if uid != source_id]
+                    if target_id not in user_ids:
+                        user_ids.append(target_id)
+                    changed = True
+                    merged_count += 1
+                    logger.info(f"画像按别名合并：{source_key} -> {target_key}")
+
+                if changed:
+                    await self._storage.put_kv_data(index_key, user_ids)
+
+        if merged_count:
+            logger.info(f"画像别名合并完成：{merged_count} 条画像已并入真实用户")
         return merged_count
 
     async def delete_user_profile(

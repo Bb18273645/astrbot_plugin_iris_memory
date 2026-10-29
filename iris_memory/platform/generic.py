@@ -13,6 +13,7 @@ from typing import Any, List, TYPE_CHECKING
 
 from ..core import get_logger
 from ..platform.base import PlatformAdapter, ReplyInfo
+from ..identity import resolve_user_id
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -41,10 +42,16 @@ class GenericAdapter(PlatformAdapter):
 
     def get_user_id(self, event: Any) -> str:
         try:
-            return str(event.message_obj.sender.user_id)
+            raw_id = str(event.message_obj.sender.user_id)
         except AttributeError:
             logger.error("无法获取用户ID：event.message_obj.sender.user_id 不存在")
             raise
+
+        # 部分平台没有真实用户 ID，直接把显示名填进 user_id（内置 webchat 即
+        # MessageMember(username, username)）。按配置归一化，避免同一人被拆成
+        # 多份画像 / 记忆（#31）。
+        nickname = str(getattr(event.message_obj.sender, "nickname", "") or "")
+        return resolve_user_id(raw_id, nickname=nickname)
 
     def get_user_name(self, event: Any) -> str:
         try:
