@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **用户画像存储键归一化（#29）**：开启「群画像隔离」后私聊链路的 `group_id` 是空串，而管理器/Web 路由的默认值是哨兵 `"default"`，两者在存储层被当成两个命名空间，同一用户出现两条画像（其中一条永远是空壳）。现在存储层统一归一化为 `user_profile:{persona}:default:{user_id}`；启动时执行一次幂等迁移，把历史的 `user_profile:{persona}::{user_id}` 合并进 `default`（`default` 侧优先、空字段由旧记录补齐、列表取并集），并清理空串 group 的 `user_index` / `user_group_index` 残留；列表接口按 `user_id` 去重，历史脏索引不再显示重复项。
+
+### Tests
+
+- 新增 `tests/profile/test_group_key_migration.py`：覆盖 group_id 归一化、空 group 读写落到同一键、迁移合并与幂等、历史重复索引去重。
+
 ## [3.2.1] - 2026-09-08
 
 ### Fixed
