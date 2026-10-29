@@ -527,6 +527,8 @@ class ComponentManager:
         self._status = SystemStatus()
         self._background_tasks: Dict[str, asyncio.Task] = {}
         self._background_results: Dict[str, ComponentInitResult] = {}
+        # 需要延迟到 AstrBot 加载完成后再初始化的组件名（#28）
+        self._deferred_components: set = set()
 
         for component in components:
             self._status.register_module(component.name, default_available=False)
@@ -596,6 +598,10 @@ class ComponentManager:
                     eager_results.append(result)
 
             for component in background_components:
+                if component.name in getattr(self, "_deferred_components", set()):
+                    # 延迟到 on_astrbot_loaded 后再初始化，避免在 Provider 注册前空转重试（#28）
+                    logger.info(f"组件 {component.name} 延迟到 AstrBot 加载完成后再初始化")
+                    continue
                 task = asyncio.create_task(
                     self._init_background_component(component),
                     name=f"init_{component.name}",
@@ -617,6 +623,31 @@ class ComponentManager:
             )
 
             return eager_results
+
+    async def init_deferred_components(self) -> None:
+        """初始化此前被延迟的组件（在 on_astrbot_loaded 后调用）。
+
+        背景：AstrBot 在插件加载完成后才注册 Provider。若 L2 在插件初始化阶段
+        就开始查找 Embedding Provider，必然找不到，只能在重试中空转数十秒。
+        延迟到该钩子后初始化，可一次命中（#28）。
+        """
+        deferred = getattr(self, "_deferred_components", set())
+        if not deferred:
+            return
+        for name in list(deferred):
+            component = self.get_component(name)
+            if component is None:
+                continue
+            existing = self._background_tasks.get(name)
+            if existing is not None and not existing.done():
+                continue
+            task = asyncio.create_task(
+                self._init_background_component(component),
+                name=f"init_{name}",
+            )
+            self._background_tasks[name] = task
+            logger.info(f"组件 {name} 延迟初始化已启动")
+        deferred.clear()
 
     async def _init_background_component(
         self, component: Component
