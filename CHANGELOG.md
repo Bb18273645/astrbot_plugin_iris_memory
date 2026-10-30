@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **通用适配器降级日志降噪**：`get_adapter()` 在单条消息链路里会被调用十余次，此前每次都对 telegram/webchat 等平台打一条 WARN「未支持的平台类型」，单条消息刷十几行。改为每个平台只提示一次（INFO），后续走 DEBUG。
 
+### Notes
+
+- **#31 在 AstrBot 4.29.3 上已不再触发**：该版本的 webchat 适配器把显示名与真实 ID 分开传递（事件日志形如 `[webchat(webchat)] 柠 夏/8495766039`），`sender.user_id` 本身就是数字 ID，归一化按规则不介入。本功能保留为旧版本 AstrBot 及其他「以显示名占位」平台的兜底，并与 `#29` 的键归一同源。
+
 ### Tests
 
 - 新增 `tests/profile/test_group_key_migration.py`：覆盖 group_id 归一化、空 group 读写落到同一键、迁移合并与幂等、别名画像合并、历史重复索引去重。
