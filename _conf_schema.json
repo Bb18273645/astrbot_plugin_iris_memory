@@ -306,6 +306,12 @@
         "default": true,
         "description": "仅在 user_id 不含数字时才用兜底",
         "hint": "防止误伤本来就有数字ID的平台（Telegram、QQ 等）"
+      },
+      "fallback_platforms": {
+        "type": "string",
+        "default": "webchat",
+        "description": "兜底生效的平台（逗号分隔）",
+        "hint": "默认只对 webchat 生效。WeCom、飞书等用字符串 userid 的平台若纳入，会把所有用户并成一个人；填 * 表示不限制"
       }
     }
   },

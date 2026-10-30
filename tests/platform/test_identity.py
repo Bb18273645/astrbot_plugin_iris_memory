@@ -53,6 +53,7 @@ class FakeConfig:
             "identity.user_id_aliases": "",
             "identity.fallback_user_id": "",
             "identity.only_when_no_digits": True,
+            "identity.fallback_platforms": "webchat",
         }
         self._values.update(values)
 
@@ -87,11 +88,20 @@ def test_fallback_only_for_display_name_like_ids():
     config = FakeConfig(**{"identity.fallback_user_id": "8495766039"})
 
     # 与昵称相同 → 明显是显示名
-    assert resolve_user_id("柠 夏", nickname="柠 夏", config=config) == "8495766039"
+    assert (
+        resolve_user_id("柠 夏", nickname="柠 夏", platform="webchat", config=config)
+        == "8495766039"
+    )
     # 不含数字 → 也是显示名
-    assert resolve_user_id("Alice", nickname="爱丽丝", config=config) == "8495766039"
+    assert (
+        resolve_user_id("Alice", nickname="爱丽丝", platform="webchat", config=config)
+        == "8495766039"
+    )
     # 正常平台 ID → 不动
-    assert resolve_user_id("8495766039", nickname="柠 夏", config=config) == "8495766039"
+    assert (
+        resolve_user_id("8495766039", nickname="柠 夏", platform="webchat", config=config)
+        == "8495766039"
+    )
 
 
 def test_fallback_disabled_by_only_when_no_digits():
@@ -103,7 +113,41 @@ def test_fallback_disabled_by_only_when_no_digits():
     )
 
     # 关闭该限制后，只要不是昵称相同就不改写
-    assert resolve_user_id("Alice", nickname="爱丽丝", config=config) == "Alice"
+    assert (
+        resolve_user_id("Alice", nickname="爱丽丝", platform="webchat", config=config)
+        == "Alice"
+    )
+
+
+def test_fallback_scoped_to_platforms():
+    """兜底默认只对 webchat 生效，避免字符串 userid 的平台被并成一个人"""
+    config = FakeConfig(**{"identity.fallback_user_id": "8495766039"})
+
+    assert resolve_user_id("Alice", platform="webchat", config=config) == "8495766039"
+    assert resolve_user_id("Alice", platform="wecom", config=config) == "Alice"
+    assert resolve_user_id("Alice", platform="", config=config) == "Alice"
+
+
+def test_fallback_platform_wildcard():
+    config = FakeConfig(
+        **{
+            "identity.fallback_user_id": "8495766039",
+            "identity.fallback_platforms": "*",
+        }
+    )
+
+    assert resolve_user_id("Alice", platform="wecom", config=config) == "8495766039"
+
+
+def test_fallback_blank_platform_list_disables_fallback():
+    config = FakeConfig(
+        **{
+            "identity.fallback_user_id": "8495766039",
+            "identity.fallback_platforms": "",
+        }
+    )
+
+    assert resolve_user_id("Alice", platform="webchat", config=config) == "Alice"
 
 
 def test_no_fallback_configured_keeps_id():

@@ -97,6 +97,14 @@ def _merge_profile_dicts(primary: dict, secondary: Optional[dict]) -> dict:
             continue
         if current in (None, "", 0, 0.0) and value not in (None, ""):
             merged[key] = value
+
+    versions = [
+        int(item.get("version") or 0)
+        for item in (primary, secondary)
+        if isinstance(item, dict) and str(item.get("version") or "").isdigit()
+    ]
+    if versions:
+        merged["version"] = max(versions)
     return merged
 
 
@@ -645,6 +653,10 @@ class ProfileStorage(Component):
                 new_key = f"user_profile:{persona_id}:{GLOBAL_GROUP_ID}:{user_id}"
                 old_data = await self._storage.get_kv_data(old_key, None)
                 if old_data:
+                    await self._storage.put_kv_data(
+                        f"user_profile_backup:{persona_id}:__empty__:{user_id}",
+                        old_data,
+                    )
                     new_data = await self._storage.get_kv_data(new_key, None)
                     # default 侧优先，空字段由空串侧的旧数据补齐，避免迁移丢字段
                     await self._storage.put_kv_data(
@@ -725,6 +737,10 @@ class ProfileStorage(Component):
                     if not source_data:
                         continue
 
+                    await self._storage.put_kv_data(
+                        f"user_profile_backup:{persona_id}:{group_id}:{source_id}",
+                        source_data,
+                    )
                     target_data = await self._storage.get_kv_data(target_key, None)
                     await self._storage.put_kv_data(
                         target_key,

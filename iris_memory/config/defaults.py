@@ -85,6 +85,8 @@ class IdentityConfig:
     user_id_aliases: str = ""
     fallback_user_id: str = ""
     only_when_no_digits: bool = True
+    # 兜底生效的平台，逗号分隔；默认仅 webchat，防止字符串 userid 的平台被误并
+    fallback_platforms: str = "webchat"
 
 
 @dataclass

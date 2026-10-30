@@ -51,7 +51,11 @@ class GenericAdapter(PlatformAdapter):
         # MessageMember(username, username)）。按配置归一化，避免同一人被拆成
         # 多份画像 / 记忆（#31）。
         nickname = str(getattr(event.message_obj.sender, "nickname", "") or "")
-        return resolve_user_id(raw_id, nickname=nickname)
+        try:
+            platform_name = str(event.get_platform_name() or "")
+        except Exception:  # 事件对象缺该方法时不影响取 ID
+            platform_name = ""
+        return resolve_user_id(raw_id, nickname=nickname, platform=platform_name)
 
     def get_user_name(self, event: Any) -> str:
         try:

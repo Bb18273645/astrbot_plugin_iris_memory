@@ -53,6 +53,14 @@ from astrbot_plugin_iris_memory.iris_memory.profile.storage import (  # noqa: E4
 )
 
 
+@pytest.fixture(autouse=True)
+def _default_config(monkeypatch):
+    """隔离全局配置，避免其他测试文件的 config 桩影响本文件。"""
+    from astrbot_plugin_iris_memory.iris_memory.profile import storage as storage_module
+
+    monkeypatch.setattr(storage_module, "get_config", lambda: _FakeConfig())
+
+
 class FakeKV:
     """最小 KV 存储：dict 语义 + 深拷贝，模拟 AstrBot 的 get/put/delete_kv_data"""
 
@@ -135,6 +143,8 @@ async def test_migrate_merges_empty_group_profile_into_default():
     # 旧键删除，字段并入 default 记录
     assert "user_profile:default::u1" not in kv.data
     assert kv.data["user_profile:default:default:u1"]["occupation"] == "工程师"
+    assert kv.data["user_profile:default:default:u1"]["version"] == 2
+    assert kv.data["user_profile_backup:default:__empty__:u1"]["version"] == 1
     # 索引清理：空串 group 不再出现，空串索引被删除
     assert kv.data["user_group_index:default"] == ["default"]
     assert "user_index:default:" not in kv.data
@@ -208,6 +218,11 @@ async def test_migrate_alias_profiles_merges_display_name(monkeypatch):
     assert "user_profile:default:default:柠 夏" not in kv.data
     assert kv.data["user_profile:default:default:8495766039"]["occupation"] == "工程师"
     assert kv.data["user_index:default:default"] == ["8495766039"]
+    # 源画像删除前落一份备份，便于回滚
+    backup = kv.data["user_profile_backup:default:default:柠 夏"]
+    assert backup["occupation"] == "工程师"
+    # 合并后版本取两者最大值，不回退
+    assert kv.data["user_profile:default:default:8495766039"]["version"] >= 2
 
     # 幂等：再跑一次没有可合并项
     assert await storage.migrate_alias_profiles() == 0
