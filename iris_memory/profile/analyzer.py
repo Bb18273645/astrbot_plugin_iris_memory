@@ -19,6 +19,20 @@ if TYPE_CHECKING:
 logger = get_logger("profile")
 
 
+class ProfileAnalysisError(RuntimeError):
+    """画像分析调用或解析失败（携带真实原因，避免被误报为无效 JSON）"""
+
+
+def _profile_timeout_seconds() -> float | None:
+    """读取画像分析专用超时；未配置时沿用全局 Provider 超时。"""
+    try:
+        raw = get_config().get("profile.timeout_ms", 0) or 0
+        timeout_ms = int(raw)
+    except (RuntimeError, TypeError, ValueError):
+        return None
+    return timeout_ms / 1000 if timeout_ms > 0 else None
+
+
 # LLM 分析时从画像字典中剥离的纯元数据字段（对分析无价值，徒增 token）
 _ANALYSIS_STRIP_KEYS = frozenset({"field_meta", "update_tracker", "version"})
 
@@ -87,7 +101,9 @@ class ProfileAnalyzer:
 
         try:
             response = await self._llm_manager.generate_direct(
-                prompt=prompt, module=PROFILE_ANALYSIS
+                prompt=prompt,
+                module=PROFILE_ANALYSIS,
+                timeout=_profile_timeout_seconds(),
             )
 
             result = self._parse_json_response(response)
@@ -123,7 +139,9 @@ class ProfileAnalyzer:
 
         try:
             response = await self._llm_manager.generate_direct(
-                prompt=prompt, module=PROFILE_ANALYSIS
+                prompt=prompt,
+                module=PROFILE_ANALYSIS,
+                timeout=_profile_timeout_seconds(),
             )
 
             result = self._parse_json_response(response)
@@ -215,7 +233,9 @@ tier=mid 只更新中期字段，tier=long 只更新长期字段，tier=combined
 
         try:
             response = await self._llm_manager.generate_direct(
-                prompt=prompt, module=PROFILE_ANALYSIS
+                prompt=prompt,
+                module=PROFILE_ANALYSIS,
+                timeout=_profile_timeout_seconds(),
             )
             parsed = self._parse_json_response(response)
             raw_users = parsed.get("users", {})
@@ -230,12 +250,15 @@ tier=mid 只更新中期字段，tier=long 只更新长期字段，tier=combined
                 "users": safe_users,
             }
         except Exception as e:
-            # 补全异常类型与栈，便于定位（#33）
+            # 补全异常类型与栈，并把真实原因抛给调用方：
+            # 超时/熔断不能被上层误报成「返回无效 JSON」（#33 后续）
             logger.error(
                 f"批量画像分析失败: {type(e).__name__}: {e!r}",
                 exc_info=True,
             )
-            return {}
+            raise ProfileAnalysisError(
+                f"批量画像分析失败: {type(e).__name__}: {e}"
+            ) from e
 
     def _build_group_analysis_prompt(
         self,

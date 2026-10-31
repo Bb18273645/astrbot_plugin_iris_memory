@@ -61,6 +61,8 @@ class ProfileConfig:
     analysis_provider: str = ""
     enable_auto_injection: bool = True
     favorability_enable: bool = True
+    # 画像分析专用超时(ms)；0 表示沿用全局 Provider 超时
+    timeout_ms: int = 0
 
 
 @dataclass

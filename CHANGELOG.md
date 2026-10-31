@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **用户身份归一化（#31）**：部分平台适配器没有真实用户 ID，直接把显示名填进 `sender.user_id`（AstrBot 内置 webchat 即 `MessageMember(username, username)`），导致同一人在 Web 面板与 IM 各存一份画像。新增配置节「用户身份归一化」：`user_id_aliases`（显示名 → 真实 ID 的 JSON 映射，命中即替换）、`fallback_user_id`（未命中映射且 ID 明显是显示名时使用的兜底，默认留空不生效）、`only_when_no_digits`（仅在 ID 不含数字时兜底）、`fallback_platforms`（兜底平台白名单，默认仅 `webchat`，空白表示禁用，`*` 表示不限制）。启动时按映射把历史显示名画像并入真实 ID（字段互补、索引同步、源画像先备份），不再需要额外的旁路插件。
 
 - **通用适配器降级日志降噪**：`get_adapter()` 在单条消息链路里会被调用十余次，此前每次都对 telegram/webchat 等平台打一条 WARN「未支持的平台类型」，单条消息刷十几行。改为每个平台只提示一次（INFO），后续走 DEBUG。
+- **画像分析超时与错误归因**：新增 `profile.timeout_ms`（0 沿用全局 Provider 超时），慢速/推理型模型不再被固定的 60 秒截断。批量画像分析失败时抛出 `ProfileAnalysisError` 并保留真实的超时/熔断原因，不再被上层笼统报成「返回无效 JSON」，Outbox 日志可直接看到超时/熔断。
 
 ### Notes
 
