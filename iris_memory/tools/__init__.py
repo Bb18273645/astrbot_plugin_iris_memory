@@ -3,6 +3,7 @@
 from .correct_memory import CorrectMemoryTool
 from .get_profile import GetProfileTool
 from .proactive import AddFollowUpTool, EndFollowUpTool, SetCooldownTool
+from .recent_images import GetRecentImagesTool
 from .registry import EXPECTED_TOOL_NAMES, build_llm_tools, register_llm_tools
 from .save_knowledge import SaveKnowledgeTool
 from .save_memory import SaveMemoryTool
@@ -15,6 +16,7 @@ __all__ = [
     "EndFollowUpTool",
     "EXPECTED_TOOL_NAMES",
     "GetProfileTool",
+    "GetRecentImagesTool",
     "SaveKnowledgeTool",
     "SaveMemoryTool",
     "SearchKnowledgeGraphTool",

@@ -1,6 +1,6 @@
 """LLM Tool 统一注册入口
 
-全部 9 个工具（记忆侧 6 个 + 主动回复侧 3 个）由 build_llm_tools()
+全部 10 个工具（记忆侧 7 个 + 主动回复侧 3 个）由 build_llm_tools()
 构建、_validate_tools() 校验、register_llm_tools() 注册并统一修正
 插件归属（handler_module_path）。
 
@@ -21,6 +21,7 @@ from ..proactive.tools import ToolContext
 from .correct_memory import CorrectMemoryTool
 from .get_profile import GetProfileTool
 from .proactive import AddFollowUpTool, EndFollowUpTool, SetCooldownTool
+from .recent_images import GetRecentImagesTool
 from .save_knowledge import SaveKnowledgeTool
 from .save_memory import SaveMemoryTool
 from .search_knowledge_graph import SearchKnowledgeGraphTool
@@ -36,6 +37,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "correct_memory",
         "search_knowledge_graph",
         "get_profile",
+        "get_recent_images",
         "add_follow_up",
         "end_follow_up",
         "set_cooldown",
@@ -56,6 +58,7 @@ def build_llm_tools(
         CorrectMemoryTool(),
         SearchKnowledgeGraphTool(),
         GetProfileTool(),
+        GetRecentImagesTool(),
         AddFollowUpTool(state, tool_context),
         EndFollowUpTool(state, tool_context),
         SetCooldownTool(state, tool_context),

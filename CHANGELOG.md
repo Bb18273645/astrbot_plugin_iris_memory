@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **图片长期记忆**：图片解析成功后，除了进入 L1，还会把描述作为一条记忆写入 L2（内容形如「图片记忆：<用户> 发送了一张图片，画面内容：…」，metadata 带 `image_hash`/`session_id`/`message_id`），以后可以用「之前那张图」这类问题检索到。`image_memory_enable` 控制开关，`image_memory_max_chars` 控制写入长度；每张新图片会产生一次嵌入调用。
+- **图片记忆去重与过期**：写入前扫描最近 `image_memory_dedupe_scan`（默认 500）条记忆，同一 `image_hash` 不重复写入；`image_memory_retention_days`（默认 30，0 表示永久）会给图片记忆设置 `expires_at`，由梦境周期的 `purge_expired_memories()` 清理。
+- **最近图片工具**：新增 LLM Tool `get_recent_images(limit, days)`，用户问「我之前发的那张图」「最近有什么图片」时，按时间倒序返回图片发送时间与画面描述，只读图片记忆、无副作用。
 - **本轮图片上下文**：当前消息里图片的解析结果会注入本轮 LLM 请求，bot 在收到图片的当轮就能据此理解和作答。默认最多等待 `image_current_turn_wait_ms`（3000ms）取解析结果，超时不阻塞主流程、不取消后台解析；仍未就绪时按 `image_current_turn_hint_enable` 给出「用户发送了图片」的提示，避免模型凭空描述。条数与长度分别由 `image_current_turn_max_images`（默认 3）和 `image_current_turn_max_chars`（默认 400）控制，`image_current_turn_enable` 可整体关闭。
 
 ### Fixed

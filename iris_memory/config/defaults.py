@@ -698,6 +698,20 @@ class HiddenConfig:
         default=400,
         metadata={"description": "写入长期记忆的图片描述字符上限（0 不截断）", "group": "图片处理"},
     )
+    image_memory_retention_days: int = field(
+        default=30,
+        metadata={
+            "description": "图片记忆保留天数（0 表示永久），到期由梦境任务清理",
+            "group": "图片处理",
+        },
+    )
+    image_memory_dedupe_scan: int = field(
+        default=500,
+        metadata={
+            "description": "写入前扫描最近多少条记忆做同一张图的去重（0 关闭扫描）",
+            "group": "图片处理",
+        },
+    )
 
     # 图片去重参数
     image_phash_enable: bool = field(

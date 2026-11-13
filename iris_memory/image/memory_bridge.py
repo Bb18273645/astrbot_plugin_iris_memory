@@ -55,17 +55,34 @@ async def store_image_memory(
         logger.debug("L2 记忆库不可用，跳过图片记忆写入")
         return False
 
+    from datetime import datetime, timedelta
+
     from ..core.persona import resolve_persona
     from ..platform import get_adapter
 
     try:
+        persona_id = await resolve_persona(component_manager, event)
+        image_hash = str(getattr(img_item, "image_hash", "") or "")
+
+        # 同一张图不重复写记忆：先扫描最近的记忆条目做 image_hash 去重
+        dedupe_scan = int(config.get("image_memory_dedupe_scan", 500) or 0)
+        if dedupe_scan > 0 and image_hash:
+            recent = await l2_memory.get_latest_memories(
+                limit=dedupe_scan,
+                persona_id=persona_id,
+            )
+            for result in recent:
+                metadata = result.entry.metadata or {}
+                if metadata.get("image_hash") == image_hash:
+                    logger.debug(f"图片记忆已存在，跳过：{image_hash[:16]}…")
+                    return True
+
         adapter = get_adapter(event)
         session_id = adapter.get_session_id(event)
         user_id = str(getattr(img_item, "user_id", "") or "") or adapter.get_user_id(
             event
         )
         message_id = str(getattr(img_item, "message_id", "") or "")
-        image_hash = str(getattr(img_item, "image_hash", "") or "")
 
         sender = user_id or "用户"
         content = f"图片记忆：{sender} 发送了一张图片，画面内容：{description}"
@@ -78,7 +95,13 @@ async def store_image_memory(
             "message_id": message_id,
         }
 
-        persona_id = await resolve_persona(component_manager, event)
+        # 图片记忆按 TTL 过期：梦境周期里的 purge_expired_memories() 负责清理
+        retention_days = int(config.get("image_memory_retention_days", 30) or 0)
+        if retention_days > 0:
+            metadata["expires_at"] = (
+                datetime.now() + timedelta(days=retention_days)
+            ).isoformat()
+
         memory_id = await l2_memory.add_memory(
             content,
             metadata,

@@ -12,7 +12,7 @@ from astrbot_plugin_iris_memory.iris_memory.proactive.tools import ToolContext
 from astrbot_plugin_iris_memory.iris_memory.tools import EXPECTED_TOOL_NAMES, build_llm_tools, register_llm_tools
 from astrbot_plugin_iris_memory.iris_memory.tools.registry import _validate_tools
 
-# 9 个工具的精确 Schema 快照。注册重构必须保持 Schema 深度相等，
+# 10 个工具的精确 Schema 快照。注册重构必须保持 Schema 深度相等，
 # 任何调整（新增 required/default/minimum/maximum、修改类型）都应单独提交。
 EXPECTED_SCHEMAS = {
     "save_knowledge": {
@@ -187,6 +187,22 @@ EXPECTED_SCHEMAS = {
         },
         "required": [],
     },
+    "get_recent_images": {
+        "type": "object",
+        "properties": {
+            "limit": {
+                "type": "integer",
+                "description": "返回的图片条数（默认 5，最多 20）",
+                "default": 5,
+            },
+            "days": {
+                "type": "integer",
+                "description": "只看最近多少天的图片（默认 7，0 表示不限）",
+                "default": 7,
+            },
+        },
+        "required": [],
+    },
     # 3 个主动回复工具：与原 @filter.llm_tool 装饰器实际生成的 Schema 一致
     "add_follow_up": {
         "type": "object",
@@ -244,7 +260,7 @@ def _make_context() -> Context:
 
 
 def test_build_returns_nine_tools(tools):
-    assert len(tools) == 9
+    assert len(tools) == 10
 
 
 def test_tool_names_match_expected(tools):
@@ -318,8 +334,8 @@ def test_register_writes_plugin_ownership(state, tool_context):
     )
 
     tools = context.provider_manager.llm_tools.func_list
-    assert len(tools) == 9
-    assert len(registered) == 9
+    assert len(tools) == 10
+    assert len(registered) == 10
     assert {tool.handler_module_path for tool in tools} == {
         "data.plugins.astrbot_plugin_iris_memory.main"
     }
@@ -347,7 +363,7 @@ def test_double_registration_replaces_without_duplicates(state, tool_context):
     )
 
     tools = context.provider_manager.llm_tools.func_list
-    assert len(tools) == 9
+    assert len(tools) == 10
     assert {tool.name for tool in tools} == EXPECTED_TOOL_NAMES
 
     first_by_name = {tool.name: tool for tool in first}

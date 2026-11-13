@@ -17,6 +17,8 @@ def _config(**overrides):
     values = {
         "image_memory_enable": True,
         "image_memory_max_chars": 400,
+        "image_memory_retention_days": 30,
+        "image_memory_dedupe_scan": 500,
     }
     values.update(overrides)
     config = MagicMock()
@@ -32,31 +34,47 @@ def _component_manager(l2_memory):
     return manager
 
 
-def _item():
+def _l2_memory(existing=None, memory_id="mem_123"):
+    l2_memory = MagicMock()
+    l2_memory.add_memory = AsyncMock(return_value=memory_id)
+    l2_memory.get_latest_memories = AsyncMock(return_value=existing or [])
+    return l2_memory
+
+
+def _item(image_hash="ph:abcdef012345"):
     item = MagicMock()
-    item.image_hash = "ph:abcdef012345"
+    item.image_hash = image_hash
     item.message_id = "m1"
     item.user_id = "user-1"
     return item
 
 
-@pytest.mark.asyncio
-async def test_image_description_is_written_to_l2():
-    l2_memory = MagicMock()
-    l2_memory.add_memory = AsyncMock(return_value="mem_123")
-    manager = _component_manager(l2_memory)
-    event = MagicMock()
+def _recent_entry(image_hash):
+    result = MagicMock()
+    result.entry = MagicMock()
+    result.entry.metadata = {"type": "image", "image_hash": image_hash}
+    result.entry.content = "图片记忆：user-1 发送了一张图片"
+    return result
 
+
+def _adapter():
     adapter = MagicMock()
     adapter.get_session_id.return_value = "private:user-1"
     adapter.get_user_id.return_value = "user-1"
+    return adapter
+
+
+@pytest.mark.asyncio
+async def test_image_description_is_written_to_l2():
+    l2_memory = _l2_memory()
+    manager = _component_manager(l2_memory)
 
     with (
         patch(_CONFIG_PATCH, return_value=_config()),
-        patch(_ADAPTER_PATCH, return_value=adapter),
+        patch(_ADAPTER_PATCH, return_value=_adapter()),
         patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
     ):
-        ok = await store_image_memory(manager, event, _item(), "一只橘猫坐在键盘上")
+        ok = await store_image_memory(manager, MagicMock(), _item(), "一只橘猫坐在键盘上")
 
     assert ok is True
     l2_memory.add_memory.assert_awaited_once()
@@ -71,9 +89,56 @@ async def test_image_description_is_written_to_l2():
 
 
 @pytest.mark.asyncio
+async def test_same_image_is_not_written_twice():
+    l2_memory = _l2_memory(existing=[_recent_entry("ph:abcdef012345")])
+    manager = _component_manager(l2_memory)
+
+    with (
+        patch(_CONFIG_PATCH, return_value=_config()),
+        patch(_ADAPTER_PATCH, return_value=_adapter()),
+        patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
+    ):
+        ok = await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
+
+    assert ok is True
+    l2_memory.add_memory.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retention_sets_expiry():
+    l2_memory = _l2_memory()
+    manager = _component_manager(l2_memory)
+
+    with (
+        patch(_CONFIG_PATCH, return_value=_config(image_memory_retention_days=7)),
+        patch(_ADAPTER_PATCH, return_value=_adapter()),
+        patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
+    ):
+        await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
+
+    metadata = l2_memory.add_memory.await_args.args[1]
+    assert "expires_at" in metadata
+
+
+@pytest.mark.asyncio
+async def test_retention_zero_keeps_forever():
+    l2_memory = _l2_memory()
+    manager = _component_manager(l2_memory)
+
+    with (
+        patch(_CONFIG_PATCH, return_value=_config(image_memory_retention_days=0)),
+        patch(_ADAPTER_PATCH, return_value=_adapter()),
+        patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
+    ):
+        await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
+
+    metadata = l2_memory.add_memory.await_args.args[1]
+    assert "expires_at" not in metadata
+
+
+@pytest.mark.asyncio
 async def test_disabled_flag_skips_write():
-    l2_memory = MagicMock()
-    l2_memory.add_memory = AsyncMock()
+    l2_memory = _l2_memory()
     manager = _component_manager(l2_memory)
 
     with patch(_CONFIG_PATCH, return_value=_config(image_memory_enable=False)):
@@ -98,16 +163,12 @@ async def test_missing_l2_component_skips_write():
 
 @pytest.mark.asyncio
 async def test_long_description_is_truncated():
-    l2_memory = MagicMock()
-    l2_memory.add_memory = AsyncMock(return_value="mem_123")
+    l2_memory = _l2_memory()
     manager = _component_manager(l2_memory)
-    adapter = MagicMock()
-    adapter.get_session_id.return_value = "s1"
-    adapter.get_user_id.return_value = "u1"
 
     with (
         patch(_CONFIG_PATCH, return_value=_config(image_memory_max_chars=10)),
-        patch(_ADAPTER_PATCH, return_value=adapter),
+        patch(_ADAPTER_PATCH, return_value=_adapter()),
         patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
     ):
         await store_image_memory(manager, MagicMock(), _item(), "很" * 50)

@@ -63,6 +63,19 @@ def test_image_memory_is_wired():
     )
 
 
+def test_image_memory_dedupe_and_retention():
+    source = _read("iris_memory/image/memory_bridge.py")
+    assert "get_latest_memories(" in source, "同一张图的去重扫描被删除了"
+    assert "expires_at" in source, "图片记忆的 TTL 过期时间被删除了"
+
+
+def test_recent_images_tool_registered():
+    registry = _read("iris_memory/tools/registry.py")
+    assert "GetRecentImagesTool" in registry, "最近图片工具没有注册"
+    assert "get_recent_images" in registry, "最近图片工具名被删除了"
+    assert "get_recent_images" in _read("iris_memory/tools/recent_images.py")
+
+
 def test_summary_strips_image_placeholders():
     source = _read("iris_memory/l1_buffer/summarizer.py")
     assert "_clean_image_placeholders" in source, "摘要前的图片占位符清理被删除了"
