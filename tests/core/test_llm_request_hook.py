@@ -9,6 +9,7 @@ from datetime import datetime
 
 from astrbot_plugin_iris_memory.iris_memory.l1_buffer.models import ContextMessage
 from astrbot_plugin_iris_memory.iris_memory.core.llm_request_hook import (
+    _apply_request_budget,
     _build_image_map,
     _collect_l1_context,
     _get_inline_image_desc,
@@ -1144,3 +1145,105 @@ def test_profile_injection_tolerates_malformed_model_output():
     assert "重要日期: 2024-01-01 生日, 05-01, 12-01(纪念日)" in text
     assert "搬家" in text
     assert "前任" in text
+
+
+class TestRequestBudget:
+    def test_caps_prompt_and_all_dynamic_sections(self):
+        from astrbot_plugin_iris_memory.iris_memory.utils import count_tokens
+
+        req = MagicMock()
+        req.prompt = "开头要求" + ("很长的正文" * 400) + "结尾问题"
+        config = MagicMock()
+        config.get.side_effect = lambda key, default=None: (
+            160 if key == "token_budget_max_tokens" else default
+        )
+
+        with patch(_GET_CONFIG_PATCH, return_value=config):
+            budgeted = _apply_request_budget(
+                req,
+                "L1 " + ("近期对话" * 100),
+                "画像 " + ("偏好" * 100),
+                "记忆 " + ("长期记忆" * 100),
+                "图谱 " + ("实体关系" * 100),
+                "学习 " + ("表达风格" * 100),
+            )
+
+        l1, profile, l2, l3, learning, meta = budgeted
+        assert count_tokens(req.prompt) <= 160
+        assert "开头要求" in req.prompt
+        assert "结尾问题" in req.prompt
+        assert meta["prompt_capped"] is True
+        assert sum(count_tokens(part) for part in (l1, profile, l2, l3, learning)) <= 160
+        assert {"l1", "l2", "profile", "l3", "learning"} <= set(
+            meta["truncated_sections"]
+        )
+
+
+class TestL1ImageAndDedupInjection:
+    @pytest.mark.asyncio
+    async def test_parsed_image_description_replaces_stale_placeholder(self):
+        event = MagicMock(message_str="下一轮消息")
+        event.get_extra.return_value = None
+        req = MagicMock()
+        buffer = MagicMock()
+        buffer.get_context.return_value = [
+            _make_msg(
+                "user",
+                "[IMG:abc123] 这张图是什么",
+                metadata={"message_id": "m1", "user_name": "用户"},
+            )
+        ]
+        component_manager = _make_component_manager(buffer)
+        adapter = MagicMock()
+        adapter.get_group_id.return_value = "group-1"
+        adapter.get_session_id.return_value = "group-1"
+        adapter.get_user_id.return_value = "user-1"
+
+        with (
+            patch(_ADAPTER_PATCH, return_value=adapter),
+            patch(_GET_CONFIG_PATCH, return_value=_default_config()),
+            patch(
+                _BUILD_IMAGE_MAP_PATCH,
+                new_callable=AsyncMock,
+                return_value={"m1": ["一只橘猫"]},
+            ),
+        ):
+            text = await _collect_l1_context(event, req, component_manager)
+
+        assert "[图:一只橘猫]" in text
+        assert "[IMG:" not in text
+
+    @pytest.mark.asyncio
+    async def test_adjacent_duplicate_assistant_reply_is_injected_once(self):
+        event = MagicMock(message_str="继续")
+        event.get_extra.return_value = None
+        req = MagicMock()
+        repeated = _make_msg(
+            "assistant",
+            "这是重复的长回复内容，不应该在历史里出现两次",
+            source="assistant",
+        )
+        buffer = MagicMock()
+        buffer.get_context.return_value = [
+            _make_msg("user", "问题", metadata={"message_id": "u1"}),
+            repeated,
+            repeated,
+        ]
+        component_manager = _make_component_manager(buffer)
+        adapter = MagicMock()
+        adapter.get_group_id.return_value = "group-1"
+        adapter.get_session_id.return_value = "group-1"
+        adapter.get_user_id.return_value = "user-1"
+
+        with (
+            patch(_ADAPTER_PATCH, return_value=adapter),
+            patch(_GET_CONFIG_PATCH, return_value=_default_config()),
+            patch(
+                _BUILD_IMAGE_MAP_PATCH,
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+        ):
+            text = await _collect_l1_context(event, req, component_manager)
+
+        assert text.count("这是重复的长回复内容") == 1

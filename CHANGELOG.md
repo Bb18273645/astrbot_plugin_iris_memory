@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **统一上下文预算**：`token_budget_max_tokens` 现在同时约束当前输入、L1、L2、画像、L3 和学习上下文，按 50/25/10/10/5 的比例自适应裁剪，避免各段单独受限但总和撑爆上下文窗口。
+- **图片描述回填**：L1 注入时用图片缓存补齐 `[IMG:*]` 占位符缺失的描述，解析结果跨轮仍能进入上下文。
+- **重复回复去重**：注入前丢弃相邻的重复 Bot 回复；同一事件内内容相同的响应只写入 L1 一次；L1 提示词明确要求不要复述历史 Bot 回复。
+
+> 以上三项在 `e220bb5`（合并上游 master）时被冲突解决覆盖，此处按原实现重新接回。
+
 ## [3.3.0] - 2026-11-10
 
 ### ⚠️ 注意
