@@ -445,7 +445,7 @@ class TestQQOfficialFactoryRegistration:
 
     def test_unregistered_platform_still_degrades(self):
         """未注册平台仍降级 GenericAdapter（降级路径不受本次改动影响）"""
-        event = make_qq_official_event(platform="telegram")
+        event = make_qq_official_event(platform="wechat")
 
         adapter = get_adapter(event)
 

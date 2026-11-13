@@ -304,7 +304,8 @@ class TestGetAdapter:
         base_logger.setLevel(logging.DEBUG)
         factory._GENERIC_FALLBACK_NOTIFIED.clear()
         try:
-            for platform in ("telegram", "telegram", "telegram", "discord"):
+            # telegram 已有专用适配器，这里只能选仍未注册的平台
+            for platform in ("discord", "discord", "discord", "wechat"):
                 event = Mock()
                 event.get_platform_name = Mock(return_value=platform)
                 get_adapter(event)

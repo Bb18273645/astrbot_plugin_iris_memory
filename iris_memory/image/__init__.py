@@ -30,6 +30,8 @@ from .image_utils import (
     compute_url_hash,
     compute_image_hash,
     detect_image_extension,
+    read_local_image_bytes,
+    image_info_has_source,
 )
 
 __all__ = [
@@ -54,4 +56,6 @@ __all__ = [
     "compute_url_hash",
     "compute_image_hash",
     "detect_image_extension",
+    "read_local_image_bytes",
+    "image_info_has_source",
 ]

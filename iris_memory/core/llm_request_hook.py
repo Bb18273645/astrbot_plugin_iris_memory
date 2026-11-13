@@ -926,6 +926,11 @@ async def _collect_current_turn_image_context(
             for item in items
             if str(getattr(item, "message_id", "") or "") == message_id
         ]
+    else:
+        # 拿不到消息 ID 时就无法区分「本轮」和「上一轮未解析」的图片，
+        # 宁可本轮不注入，也不能把旧图当成这一轮的图片。
+        logger.debug("消息 ID 不可用，跳过本轮图片上下文注入")
+        items = []
     items = items[:max_images]
 
     cache = component_manager.get_available_component("image_cache")
@@ -1934,6 +1939,7 @@ async def _parse_images_if_related_mode(
     from ..config import get_config
     from ..platform import get_adapter
     from ..image import ImageParser, ImageParseStatus, ImageParseCache
+    from ..image.image_utils import image_info_has_source
     import asyncio
 
     config = get_config()
@@ -2050,7 +2056,7 @@ async def _parse_images_if_related_mode(
 
     async def parse_with_semaphore(img_item):
         async with semaphore:
-            if not img_item.image_info or not img_item.image_info.has_url:
+            if not image_info_has_source(img_item.image_info):
                 return (img_item, None)
             result = await parser.parse(
                 img_item.image_info, image_hash=img_item.image_hash

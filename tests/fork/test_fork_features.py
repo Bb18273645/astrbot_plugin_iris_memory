@@ -65,8 +65,34 @@ def test_image_memory_is_wired():
 
 def test_image_memory_dedupe_and_retention():
     source = _read("iris_memory/image/memory_bridge.py")
-    assert "get_latest_memories(" in source, "同一张图的去重扫描被删除了"
+    assert "find_memory_id_by_metadata" in source, "图片记忆的精确去重查询被删除了"
     assert "expires_at" in source, "图片记忆的 TTL 过期时间被删除了"
+
+
+def test_image_memory_is_scoped_to_chat():
+    source = _read("iris_memory/image/memory_bridge.py")
+    assert '"group_id": group_id' in source, "图片记忆没有记录群 ID"
+    tool = _read("iris_memory/tools/recent_images.py")
+    assert "session_id" in tool, "最近图片工具没有按会话过滤"
+    assert "_normalize_days(" in tool, "days 参数没有做范围收敛"
+
+
+def test_telegram_adapter_is_registered():
+    factory = _read("iris_memory/platform/factory.py")
+    assert "TelegramAdapter" in factory, "Telegram 适配器没有注册"
+    assert '"telegram"' in factory, "Telegram 平台键被删除了"
+    adapter = _read("iris_memory/platform/telegram.py")
+    assert "async def prepare_images(" in adapter, "Telegram 图片下载入口被删除了"
+
+
+def test_platform_prepare_images_is_wired():
+    assert "async def prepare_images(" in _read("iris_memory/platform/base.py")
+    assert "prepare_images(" in _read("iris_memory/core/message_hook.py"), (
+        "图片入队没有调用平台图片预处理"
+    )
+    assert "image_info_has_source" in _read("iris_memory/core/llm_request_hook.py"), (
+        "图片解析没有接受本地文件来源"
+    )
 
 
 def test_recent_images_tool_registered():

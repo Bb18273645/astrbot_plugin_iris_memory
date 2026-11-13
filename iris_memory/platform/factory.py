@@ -26,6 +26,7 @@ from ..platform.cron import CronAdapter
 from ..platform.generic import GenericAdapter
 from ..platform.qq import OneBot11Adapter
 from ..platform.qq_official import QQOfficialAdapter
+from ..platform.telegram import TelegramAdapter
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -44,6 +45,7 @@ _ADAPTER_REGISTRY: dict[str, type[PlatformAdapter] | None] = {
     "qq_official": QQOfficialAdapter,  # QQ 官方机器人（AstrBot 4.x 协议名）
     # webhook 版复用同一消息解析（AstrBot _parse_from_qqofficial），数据形状一致
     "qq_official_webhook": QQOfficialAdapter,
+    "telegram": TelegramAdapter,  # Telegram Bot（图片需下载为本地文件）
     "cron": CronAdapter,  # AstrBot 内置定时任务（CronMessageEvent）
 }
 

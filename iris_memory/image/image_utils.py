@@ -266,3 +266,55 @@ async def compute_image_hash(
         return compute_url_hash(url)
 
     return ""
+
+
+def read_local_image_bytes(file_path: str, max_bytes: int = 10 * 1024 * 1024) -> Optional[bytes]:
+    """读取适配器已下载到本地的图片字节（带大小上限）。
+
+    平台适配器（如 Telegram）会把图片先下载到本地文件，统一图片链路
+    需要这些字节来计算 pHash、过滤无效图并写入本地缓存。
+
+    Args:
+        file_path: 本地图片路径
+        max_bytes: 允许读取的最大字节数
+
+    Returns:
+        图片字节；文件不存在、过大或读取失败时返回 None
+    """
+    from pathlib import Path
+
+    try:
+        path = Path(file_path)
+        if not path.is_file():
+            return None
+        size = path.stat().st_size
+        if size <= 0 or size > max_bytes:
+            return None
+        return path.read_bytes()
+    except OSError as exc:
+        logger.debug(f"读取本地图片失败：{exc}")
+        return None
+
+
+def image_info_has_source(image_info: object) -> bool:
+    """判断图片是否具备可解析来源：URL 或已下载的本地文件。
+
+    Args:
+        image_info: ImageInfo 实例（允许为 None）
+
+    Returns:
+        可解析时返回 True
+    """
+    from pathlib import Path
+
+    if image_info is None:
+        return False
+    if str(getattr(image_info, "url", "") or "").strip():
+        return True
+    file_path = str(getattr(image_info, "file_path", "") or "").strip()
+    if not file_path:
+        return False
+    try:
+        return Path(file_path).is_file()
+    except OSError:
+        return False

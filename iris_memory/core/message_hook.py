@@ -585,6 +585,7 @@ async def _queue_images_to_l1_buffer(
         is_similar_image,
         check_invalid_image,
         detect_image_extension,
+        read_local_image_bytes,
     )
 
     config = get_config()
@@ -592,7 +593,12 @@ async def _queue_images_to_l1_buffer(
         return 0
 
     adapter = get_adapter(event)
-    images = adapter.get_images(event)
+    # Telegram 等平台的图片需要先下载成本地文件；其余平台默认原样返回
+    try:
+        images = await adapter.prepare_images(event)
+    except Exception as exc:
+        logger.debug(f"平台图片预处理失败，回退到 get_images：{exc}")
+        images = adapter.get_images(event)
 
     if not images:
         return 0
@@ -643,6 +649,11 @@ async def _queue_images_to_l1_buffer(
                     image_data, _ = downloaded
             except Exception as e:
                 logger.debug(f"图片下载失败：{e}")
+        elif image_info.file_path:
+            # 平台适配器已把图片下载到本地（如 Telegram）
+            image_data = await asyncio.to_thread(
+                read_local_image_bytes, image_info.file_path
+            )
 
         # ---- 哈希计算（有数据时走 pHash，否则走 URL MD5） ----
         image_hash = await compute_image_hash(
@@ -772,6 +783,7 @@ async def _parse_images_if_enabled(
     from ..config import get_config
     from ..platform import get_adapter
     from ..image import ImageParser, ImageParseStatus, ImageParseCache
+    from ..image.image_utils import image_info_has_source
 
     config = get_config()
     if not config.get("l1_buffer.image_parsing.enable"):
@@ -874,14 +886,14 @@ async def _parse_images_if_enabled(
     parse_pairs = [
         (img, img.image_info)
         for img in images_to_parse
-        if img.image_info and img.image_info.has_url
+        if img.image_info and image_info_has_source(img.image_info)
     ]
 
-    # 无 url 的图片无法解析，单独标记 FAILED 并清占位符，不留残留
+    # 既无 URL 也无本地文件的图片无法解析，单独标记 FAILED 并清占位符，不留残留
     no_url_items = [
         img
         for img in images_to_parse
-        if not (img.image_info and img.image_info.has_url)
+        if not image_info_has_source(img.image_info)
     ]
     for img_item in no_url_items:
         logger.debug(f"图片无 URL，跳过解析：{img_item.image_hash[:8]}")

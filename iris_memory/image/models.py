@@ -61,6 +61,9 @@ class ImageInfo:
     size_kb: int = 0
     source: str = "user"  # user/upload/forward
     message_id: str = ""
+    # 平台侧的文件引用（如 Telegram file_id），由适配器在 prepare_images()
+    # 阶段下载成本地文件后填入 file_path，不会进入提示词
+    platform_ref: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式
@@ -75,6 +78,7 @@ class ImageInfo:
             "size_kb": self.size_kb,
             "source": self.source,
             "message_id": self.message_id,
+            "platform_ref": self.platform_ref,
         }
 
     @classmethod
@@ -94,6 +98,7 @@ class ImageInfo:
             size_kb=data.get("size_kb", 0),
             source=data.get("source", "user"),
             message_id=data.get("message_id", ""),
+            platform_ref=data.get("platform_ref", ""),
         )
 
     @property

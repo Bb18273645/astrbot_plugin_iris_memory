@@ -39,6 +39,7 @@ Iris Chat Memory - 平台接口统一管理模块
 支持的平台：
 - aiocqhttp: QQ 个人号（OneBot11 协议）
 - qq_official / qq_official_webhook: QQ 官方机器人（QQ 开放平台 API）
+- telegram: Telegram Bot（图片经 Bot API 下载后进入统一图片链路）
 - cron: AstrBot 内置定时任务（CronMessageEvent）
 
 其余平台统一经通用适配器 GenericAdapter 降级。
@@ -60,6 +61,7 @@ from ..platform.factory import (
 from ..platform.generic import GenericAdapter
 from ..platform.qq import OneBot11Adapter
 from ..platform.qq_official import QQOfficialAdapter
+from ..platform.telegram import TelegramAdapter
 
 
 __all__ = [
@@ -72,6 +74,7 @@ __all__ = [
     # 平台适配器
     "OneBot11Adapter",
     "QQOfficialAdapter",
+    "TelegramAdapter",
     "CronAdapter",
     "GenericAdapter",
     # 扩展接口

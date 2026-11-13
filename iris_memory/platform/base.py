@@ -307,6 +307,23 @@ class PlatformAdapter(ABC):
         """
         pass
 
+    async def prepare_images(
+        self, event: "AstrMessageEvent"
+    ) -> list["ImageInfo"]:
+        """把平台图片整理为统一图片链路可读取的形式
+
+        默认实现直接返回 ``get_images()``。需要额外下载的平台
+        （如 Telegram 的 file_id）在此异步阶段完成下载，把本地文件
+        写入 ``ImageInfo.file_path``。
+
+        Args:
+            event: AstrBot 消息事件对象 (AstrMessageEvent)
+
+        Returns:
+            处理后的图片信息列表
+        """
+        return self.get_images(event)
+
     @abstractmethod
     def get_reply_info(self, event: "AstrMessageEvent") -> ReplyInfo:
         """获取回复/引用消息的关联信息
