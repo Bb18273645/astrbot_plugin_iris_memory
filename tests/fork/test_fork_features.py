@@ -95,6 +95,13 @@ def test_platform_prepare_images_is_wired():
     )
 
 
+def test_error_friendly_stays_strict():
+    source = _read("iris_memory/extras/error_friendly.py")
+    assert "LLM_ERROR_MESSAGE_EXTRA_KEY" in source, "框架错误标记检测被删除了"
+    assert "ERROR_PREFIXES" in source, "框架错误前缀匹配被删除了"
+    assert "has_framework_indicator" not in source, "宽松的错误启发式又回来了"
+
+
 def test_recent_images_tool_registered():
     registry = _read("iris_memory/tools/registry.py")
     assert "GetRecentImagesTool" in registry, "最近图片工具没有注册"

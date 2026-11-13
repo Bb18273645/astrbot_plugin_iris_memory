@@ -40,6 +40,7 @@ git config core.hooksPath .githooks           # 启用推送前守卫
 | Telegram 适配器（图片下载、消息 ID、引用解析） | `iris_memory/platform/telegram.py` + 工厂注册 + `prepare_images()` | `test_telegram_adapter_is_registered` / `test_platform_prepare_images_is_wired` |
 | 图片记忆按会话隔离、精确去重、TTL | `store_image_memory` 的 `group_id`/`find_memory_id_by_metadata`/`expires_at`；`get_recent_images` 的会话过滤 | `test_image_memory_is_scoped_to_chat` / `test_image_memory_dedupe_and_retention` |
 | 最近图片工具（`get_recent_images`） | `iris_memory/tools/recent_images.py` + 注册表 | `test_recent_images_tool_registered` |
+| 错误友好化严格匹配（不误伤正常回复，拦截时记录原文） | `iris_memory/extras/error_friendly.py` | `test_error_friendly_stays_strict` |
 | 摘要前清理未解析图片占位符 | `Summarizer._clean_image_placeholders` | `test_summary_strips_image_placeholders` |
 | 重复回复去重（相邻重复 Bot 回复、同事件相同响应） | `_dedupe_l1_messages`、`llm_response_hook.py` | `test_l1_dedupe_is_wired` / `test_response_dedupe_is_present` |
 | 插件源指向本仓库 | `metadata.yaml` `repo` | `test_metadata_points_to_this_fork` |

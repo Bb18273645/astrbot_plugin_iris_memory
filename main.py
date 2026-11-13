@@ -1400,7 +1400,7 @@ class IrisMemoryPlugin(Star):
             return
 
         if self._error_processor and self._error_processor.should_process(event):
-            self._error_processor.process_result(result)
+            self._error_processor.process_result(result, event)
 
         if self._markdown_stripper and self._markdown_stripper.should_process(event):
             self._markdown_stripper.process_result(result)
