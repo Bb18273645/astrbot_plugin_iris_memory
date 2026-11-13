@@ -16,6 +16,16 @@
 | `my-fixes` | 与 `master` 相同的别名分支，仅为兼容旧配置保留 |
 | `backup/merge-history` | 改造前的历史备份，不要在上面继续开发 |
 
+### 首次克隆初始化
+
+新克隆或换机器后执行一次：
+
+```bash
+git remote add upstream https://github.com/leafliber/astrbot_plugin_iris_memory.git
+git remote set-url --push upstream DISABLED   # 防止误推到作者仓库
+git config core.hooksPath .githooks           # 启用推送前守卫
+```
+
 `master` 的第一个父提交永远是某个 `upstream/master` 提交，自有功能都是它上面的普通提交。
 升级上游时用 rebase 重放这些提交，因此**冲突只会出现在自有提交里**，不会整份文件被上游覆盖。
 
