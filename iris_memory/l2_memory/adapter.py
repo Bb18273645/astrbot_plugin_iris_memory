@@ -3234,16 +3234,20 @@ class L2MemoryAdapter(Component):
         key: str,
         value: str,
         persona_id: str = "default",
+        session_id: Optional[str] = None,
     ) -> Optional[str]:
         """按元数据键值精确查找一条记忆 ID。
 
         图片记忆写入前需要按 ``image_hash`` 去重；相比拉取最近 N 条
         逐条解析 JSON，这里用 json_extract 精确命中，且可走索引。
+        去重必须限定会话：同一张图发到另一个群/私聊时仍应各自留一条，
+        否则按会话读取的工具在第二个会话里查不到这张图。
 
         Args:
             key: 元数据键，目前只支持 ``image_hash``
             value: 元数据值
             persona_id: 人格命名空间
+            session_id: 可选的会话 ID，限定只在同一会话内去重
 
         Returns:
             命中的 memory_id，未找到或不可用时返回 None
@@ -3256,11 +3260,16 @@ class L2MemoryAdapter(Component):
         if not self._is_available or self._db is None:
             return None
         try:
-            row = self._db_fetchone(
+            sql = (
                 "SELECT memory_id FROM memories WHERE persona_id = ? "
-                "AND json_extract(metadata, '$.image_hash') = ? LIMIT 1",
-                (persona_id, value),
+                "AND json_extract(metadata, '$.image_hash') = ?"
             )
+            params: list = [persona_id, value]
+            if session_id is not None:
+                sql += " AND json_extract(metadata, '$.session_id') = ?"
+                params.append(session_id)
+            sql += " LIMIT 1"
+            row = self._db_fetchone(sql, tuple(params))
             return row[0] if row else None
         except Exception as e:
             logger.debug(f"按元数据查询记忆失败：{e}")

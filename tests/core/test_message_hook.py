@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from datetime import datetime
 
 from astrbot_plugin_iris_memory.iris_memory.core.message_hook import (
+    _remove_prepared_image_file,
     _schedule_image_pipeline,
     _wait_for_image_background_tasks,
     handle_user_message,
@@ -1107,3 +1108,110 @@ class TestPrivateChatSessionKey:
         assert call_kwargs["group_id"] == "private:user456"
         assert call_kwargs["role"] == "user"
         assert call_kwargs["source"] == "user456"
+
+
+class TestQueueImagesCachedMemoryWrite:
+    """缓存命中的图片也要为当前会话写一条图片记忆。"""
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_writes_image_memory(self):
+        from pathlib import Path
+
+        config = MagicMock()
+        config.get = lambda key, default=None: {
+            "l1_buffer.image_parsing.enable": True,
+            "image_phash_enable": False,
+            "image_filter_enable": False,
+        }.get(key, default)
+        config.data_dir = Path("/tmp/iris_test")
+
+        adapter = MagicMock()
+        adapter.get_images = MagicMock(
+            return_value=[ImageInfo(url="https://x.com/img.jpg")]
+        )
+        adapter.get_group_id = MagicMock(return_value="group_test")
+        adapter.get_session_id = MagicMock(return_value="group_test")
+        adapter.get_user_id = MagicMock(return_value="user_1")
+        adapter.get_raw_message = MagicMock(return_value={"message_id": "mid_1"})
+        adapter.get_user_name = MagicMock(return_value="测试用户")
+
+        l1_buffer = MagicMock()
+        l1_buffer.get_all_phash_hashes = MagicMock(return_value=[])
+        l1_buffer.add_image = MagicMock()
+        l1_buffer.prepend_to_last_message = MagicMock(return_value=True)
+
+        cache_manager = MagicMock()
+        cache_manager.is_available = True
+        cache_manager.get_cache = AsyncMock(
+            return_value=MagicMock(content="一只橘猫")
+        )
+
+        component_manager = MagicMock()
+        component_manager.get_available_component = lambda name: {
+            "l1_buffer": l1_buffer,
+            "image_cache": cache_manager,
+        }.get(name)
+
+        store_mock = AsyncMock(return_value=True)
+        with (
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.config.get_config",
+                return_value=config,
+            ),
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.platform.get_adapter",
+                return_value=adapter,
+            ),
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.core.persona.resolve_persona",
+                new=AsyncMock(return_value="default"),
+            ),
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.image.image_utils.compute_image_hash",
+                new=AsyncMock(return_value="testhash123456"),
+            ),
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.image.security.fetch_safe_image_bytes",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "astrbot_plugin_iris_memory.iris_memory.image.memory_bridge.store_image_memory",
+                store_mock,
+            ),
+        ):
+            await _queue_images_to_l1_buffer(MagicMock(), component_manager)
+
+        store_mock.assert_awaited_once()
+        assert store_mock.await_args.args[3] == "一只橘猫"
+
+
+class TestRemovePreparedImageFile:
+    """平台适配器下载的图片临时文件要在读入内存后清理。"""
+    _CONFIG_PATCH = "astrbot_plugin_iris_memory.iris_memory.config.get_config"
+
+    def _config(self, tmp_path):
+        config = MagicMock()
+        config.data_dir = tmp_path
+        return config
+
+    def test_removes_file_inside_telegram_temp_dir(self, tmp_path):
+        temp_dir = tmp_path / "image_cache" / "telegram"
+        temp_dir.mkdir(parents=True)
+        target = temp_dir / "tg_abc.jpg"
+        target.write_bytes(b"fake")
+
+        with patch(self._CONFIG_PATCH, return_value=self._config(tmp_path)):
+            _remove_prepared_image_file(str(target))
+
+        assert not target.exists()
+
+    def test_keeps_file_outside_telegram_temp_dir(self, tmp_path):
+        other = tmp_path / "image_cache" / "other"
+        other.mkdir(parents=True)
+        target = other / "keep.jpg"
+        target.write_bytes(b"fake")
+
+        with patch(self._CONFIG_PATCH, return_value=self._config(tmp_path)):
+            _remove_prepared_image_file(str(target))
+
+        assert target.exists()

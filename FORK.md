@@ -38,7 +38,8 @@ git config core.hooksPath .githooks           # 启用推送前守卫
 | 本轮图片上下文（当前消息的图片描述注入本轮请求，限时等待、超时降级） | `_collect_current_turn_image_context` + `preprocess_llm_request` | `test_current_turn_image_context_is_wired` |
 | 图片长期记忆（解析结果写入 L2，语义可检索） | `iris_memory/image/memory_bridge.py`，接入 related/all 两条解析路径 | `test_image_memory_is_wired` |
 | Telegram 适配器（图片下载、消息 ID、引用解析） | `iris_memory/platform/telegram.py` + 工厂注册 + `prepare_images()` | `test_telegram_adapter_is_registered` / `test_platform_prepare_images_is_wired` |
-| 图片记忆按会话隔离、精确去重、TTL | `store_image_memory` 的 `group_id`/`find_memory_id_by_metadata`/`expires_at`；`get_recent_images` 的会话过滤 | `test_image_memory_is_scoped_to_chat` / `test_image_memory_dedupe_and_retention` |
+| 图片记忆按会话隔离、精确去重、TTL、缓存命中补写 | `store_image_memory` 的 `session_id` 去重/`skip_dedup`/`expires_at`；缓存命中路径补写 | `test_image_memory_dedupe_and_retention` |
+| Telegram 图片临时文件清理 | `_remove_prepared_image_file` | `test_telegram_temp_files_are_cleaned` |
 | 最近图片工具（`get_recent_images`） | `iris_memory/tools/recent_images.py` + 注册表 | `test_recent_images_tool_registered` |
 | 错误友好化严格匹配（不误伤正常回复，拦截时记录原文） | `iris_memory/extras/error_friendly.py` | `test_error_friendly_stays_strict` |
 | 摘要前清理未解析图片占位符 | `Summarizer._clean_image_placeholders` | `test_summary_strips_image_placeholders` |

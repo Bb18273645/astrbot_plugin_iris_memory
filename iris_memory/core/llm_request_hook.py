@@ -2011,6 +2011,12 @@ async def _parse_images_if_related_mode(
                     session_id, placeholder, f"[图:{cached.content}]"
                 )
                 cached_results.append((img_item, cached))
+                # 缓存命中时也要为当前会话补一条图片记忆
+                from ..image.memory_bridge import store_image_memory
+
+                await store_image_memory(
+                    component_manager, event, img_item, cached.content
+                )
                 continue
 
         images_to_parse.append(img_item)

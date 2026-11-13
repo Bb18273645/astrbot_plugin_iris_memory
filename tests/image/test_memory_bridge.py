@@ -83,6 +83,9 @@ async def test_image_description_is_written_to_l2():
     assert metadata["session_id"] == "private:user-1"
     assert metadata["group_id"] == ""
     assert l2_memory.add_memory.await_args.kwargs["persona_id"] == "default"
+    # 去重已按 (persona, image_hash, session) 精确完成，写入时关闭语义去重，
+    # 否则同一张图发到另一个会话时会被相似度合并吞掉
+    assert l2_memory.add_memory.await_args.kwargs["skip_dedup"] is True
 
 
 @pytest.mark.asyncio
@@ -114,8 +117,31 @@ async def test_same_image_is_not_written_twice():
         ok = await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
 
     assert ok is True
-    l2_memory.find_memory_id_by_metadata.assert_awaited()
+    finder_args = l2_memory.find_memory_id_by_metadata.await_args
+    assert finder_args.args[:2] == ("image_hash", "ph:abcdef012345")
+    assert finder_args.kwargs["session_id"] == "private:user-1"
     l2_memory.add_memory.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_same_image_in_another_chat_is_written_again():
+    """同一张图发到另一个会话时仍要各写一条，否则第二个会话查不到"""
+    l2_memory = _l2_memory(existing_id=None)
+    manager = _component_manager(l2_memory)
+
+    with (
+        patch(_CONFIG_PATCH, return_value=_config()),
+        patch(_ADAPTER_PATCH, return_value=_adapter(group_id="-100999")),
+        patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
+    ):
+        ok = await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
+
+    assert ok is True
+    l2_memory.add_memory.assert_awaited_once()
+    assert l2_memory.add_memory.await_args.kwargs["skip_dedup"] is True
+    # 查询会带上当前会话，避免命中别的会话同一张图的记录
+    finder_args = l2_memory.find_memory_id_by_metadata.await_args
+    assert finder_args.kwargs["session_id"] == "group:-100999"
 
 
 @pytest.mark.asyncio

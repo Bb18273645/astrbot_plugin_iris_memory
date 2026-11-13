@@ -66,7 +66,14 @@ def test_image_memory_is_wired():
 def test_image_memory_dedupe_and_retention():
     source = _read("iris_memory/image/memory_bridge.py")
     assert "find_memory_id_by_metadata" in source, "图片记忆的精确去重查询被删除了"
+    assert "session_id=session_id" in source, "图片记忆去重没有限定会话"
+    assert "skip_dedup=True" in source, "图片记忆写入没有关闭语义去重"
     assert "expires_at" in source, "图片记忆的 TTL 过期时间被删除了"
+
+
+def test_telegram_temp_files_are_cleaned():
+    source = _read("iris_memory/core/message_hook.py")
+    assert "_remove_prepared_image_file" in source, "下载临时文件的清理逻辑被删除了"
 
 
 def test_image_memory_is_scoped_to_chat():

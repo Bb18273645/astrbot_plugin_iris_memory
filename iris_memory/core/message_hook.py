@@ -225,6 +225,27 @@ def _schedule_image_pipeline(
         pass
 
 
+def _remove_prepared_image_file(file_path: str) -> None:
+    """删除适配器下载图片时产生的临时文件（仅限 telegram 暂存目录）。
+
+    统一图片链路会把字节重新写入 ``image_cache/<hash前缀>/<hash>.<ext>``，
+    下载阶段的临时文件不再需要，及时删掉避免重复占盘。
+    """
+    try:
+        from pathlib import Path
+
+        path = Path(file_path)
+        if not path.is_file():
+            return
+        from ..config import get_config
+
+        temp_root = get_config().data_dir / "image_cache" / "telegram"
+        if temp_root in path.parents:
+            path.unlink()
+    except Exception:
+        pass
+
+
 def _record_image_pipeline_timing(
     event: "AstrMessageEvent",
     *,
@@ -654,6 +675,8 @@ async def _queue_images_to_l1_buffer(
             image_data = await asyncio.to_thread(
                 read_local_image_bytes, image_info.file_path
             )
+            # 字节已读进内存，下载阶段的临时文件不再需要
+            _remove_prepared_image_file(image_info.file_path)
 
         # ---- 哈希计算（有数据时走 pHash，否则走 URL MD5） ----
         image_hash = await compute_image_hash(
@@ -725,6 +748,10 @@ async def _queue_images_to_l1_buffer(
                 user_id=user_id,
                 status=ImageParseStatus.SUCCESS,
             )
+            # 缓存命中时也要为当前会话补一条图片记忆（同一会话由去重跳过）
+            from ..image.memory_bridge import store_image_memory
+
+            await store_image_memory(component_manager, event, queue_item, cached_desc)
         else:
             placeholder = f"[IMG:{hash_prefix}]"
             image_suffixes.append(placeholder)
@@ -843,6 +870,12 @@ async def _parse_images_if_enabled(
                 placeholder = f"[IMG:{img_item.image_hash.removeprefix('ph:')[:12]}]"
                 l1_buffer.replace_image_placeholder(
                     session_id, placeholder, f"[图:{cached.content}]"
+                )
+                # 缓存命中时也要为当前会话补一条图片记忆
+                from ..image.memory_bridge import store_image_memory
+
+                await store_image_memory(
+                    component_manager, event, img_item, cached.content
                 )
                 continue
 

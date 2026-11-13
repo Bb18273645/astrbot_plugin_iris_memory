@@ -62,16 +62,34 @@ async def store_image_memory(
 
     try:
         persona_id = await resolve_persona(component_manager, event)
+
+        adapter = get_adapter(event)
+        session_id = adapter.get_session_id(event)
+        group_id = adapter.get_group_id(event)
+        user_id = str(getattr(img_item, "user_id", "") or "") or adapter.get_user_id(
+            event
+        )
+        message_id = str(getattr(img_item, "message_id", "") or "")
         image_hash = str(getattr(img_item, "image_hash", "") or "")
 
-        # 同一张图不重复写记忆：优先用 L2 的精确查询，旧适配器回退到扫描
+        # 同一张图在同一会话内只写一次；同一张图发到别的会话仍各自留一条，
+        # 否则按会话读取的 get_recent_images 在第二个会话里查不到这张图。
         if image_hash:
             existing_id = None
             finder = getattr(l2_memory, "find_memory_id_by_metadata", None)
             if callable(finder):
-                existing_id = await finder(
-                    "image_hash", image_hash, persona_id=persona_id
-                )
+                try:
+                    existing_id = await finder(
+                        "image_hash",
+                        image_hash,
+                        persona_id=persona_id,
+                        session_id=session_id,
+                    )
+                except TypeError:
+                    # 兼容尚未支持 session_id 的旧方法签名
+                    existing_id = await finder(
+                        "image_hash", image_hash, persona_id=persona_id
+                    )
             else:
                 dedupe_scan = int(config.get("image_memory_dedupe_scan", 500) or 0)
                 if dedupe_scan > 0:
@@ -81,20 +99,15 @@ async def store_image_memory(
                     )
                     for result in recent:
                         metadata = result.entry.metadata or {}
-                        if metadata.get("image_hash") == image_hash:
+                        if (
+                            metadata.get("image_hash") == image_hash
+                            and metadata.get("session_id") == session_id
+                        ):
                             existing_id = result.entry.id
                             break
             if existing_id:
                 logger.debug(f"图片记忆已存在，跳过：{image_hash[:16]}…")
                 return True
-
-        adapter = get_adapter(event)
-        session_id = adapter.get_session_id(event)
-        group_id = adapter.get_group_id(event)
-        user_id = str(getattr(img_item, "user_id", "") or "") or adapter.get_user_id(
-            event
-        )
-        message_id = str(getattr(img_item, "message_id", "") or "")
 
         sender = user_id or "用户"
         content = f"图片记忆：{sender} 发送了一张图片，画面内容：{description}"
@@ -115,9 +128,12 @@ async def store_image_memory(
                 datetime.now() + timedelta(days=retention_days)
             ).isoformat()
 
+        # 关闭语义去重：去重已按 (persona, image_hash, session) 精确完成，
+        # 不同会话的同一张图内容几乎一样，语义去重会把第二条吞掉。
         memory_id = await l2_memory.add_memory(
             content,
             metadata,
+            skip_dedup=True,
             persona_id=persona_id,
         )
     except Exception as exc:
