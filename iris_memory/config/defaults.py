@@ -686,6 +686,19 @@ class HiddenConfig:
         },
     )
 
+    # 图片长期记忆：把图片描述写入 L2，后续可被语义检索
+    image_memory_enable: bool = field(
+        default=True,
+        metadata={
+            "description": "把图片描述写入 L2 长期记忆（会产生一次嵌入调用）",
+            "group": "图片处理",
+        },
+    )
+    image_memory_max_chars: int = field(
+        default=400,
+        metadata={"description": "写入长期记忆的图片描述字符上限（0 不截断）", "group": "图片处理"},
+    )
+
     # 图片去重参数
     image_phash_enable: bool = field(
         default=True,

@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **图片长期记忆**：图片解析成功后，除了进入 L1，还会把描述作为一条记忆写入 L2（内容形如「图片记忆：<用户> 发送了一张图片，画面内容：…」，metadata 带 `image_hash`/`session_id`/`message_id`），以后可以用「之前那张图」这类问题检索到。`image_memory_enable` 控制开关，`image_memory_max_chars` 控制写入长度；每张新图片会产生一次嵌入调用。
 - **本轮图片上下文**：当前消息里图片的解析结果会注入本轮 LLM 请求，bot 在收到图片的当轮就能据此理解和作答。默认最多等待 `image_current_turn_wait_ms`（3000ms）取解析结果，超时不阻塞主流程、不取消后台解析；仍未就绪时按 `image_current_turn_hint_enable` 给出「用户发送了图片」的提示，避免模型凭空描述。条数与长度分别由 `image_current_turn_max_images`（默认 3）和 `image_current_turn_max_chars`（默认 400）控制，`image_current_turn_enable` 可整体关闭。
 
 ### Fixed
+
+- **摘要图片占位符**：L1 摘要可能早于图片解析完成，生成摘要前把未解析的 `[IMG:hash]` 占位符替换为 `[图片]`，避免哈希碎片进入 L2 记忆；已解析的 `[图:描述]` 保留原样。
 
 - **统一上下文预算**：`token_budget_max_tokens` 现在同时约束当前输入、L1、L2、画像、L3 和学习上下文，按 50/25/10/10/5 的比例自适应裁剪，避免各段单独受限但总和撑爆上下文窗口。
 - **图片描述回填**：L1 注入时用图片缓存补齐 `[IMG:*]` 占位符缺失的描述，解析结果跨轮仍能进入上下文。

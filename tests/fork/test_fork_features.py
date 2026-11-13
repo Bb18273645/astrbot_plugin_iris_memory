@@ -54,6 +54,20 @@ def test_current_turn_image_context_is_wired():
     ), "本轮图片上下文没有接入请求预处理"
 
 
+def test_image_memory_is_wired():
+    bridge = _read("iris_memory/image/memory_bridge.py")
+    assert "async def store_image_memory(" in bridge, "图片记忆写入函数被删除了"
+    assert "store_image_memory(" in _read(REQUEST_HOOK), "related 模式没有写入图片记忆"
+    assert "store_image_memory(" in _read("iris_memory/core/message_hook.py"), (
+        "all 模式没有写入图片记忆"
+    )
+
+
+def test_summary_strips_image_placeholders():
+    source = _read("iris_memory/l1_buffer/summarizer.py")
+    assert "_clean_image_placeholders" in source, "摘要前的图片占位符清理被删除了"
+
+
 def test_l1_dedupe_is_wired():
     source = _read(REQUEST_HOOK)
     assert "def _dedupe_l1_messages(" in source, "L1 重复回复去重函数被删除了"

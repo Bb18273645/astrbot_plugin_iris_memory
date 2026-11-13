@@ -319,6 +319,34 @@ class TestSummarizer:
         assert "[张三]: 你好" in result
         assert "[助手]: 你好！" in result
 
+    def test_format_messages_replaces_unparsed_image_placeholder(self):
+        _ = Summarizer(llm_manager=mock_llm_manager)
+
+        messages = [
+            ContextMessage(
+                role="user",
+                content="[IMG:abc123def456] 这张图是什么",
+                timestamp=datetime.now(),
+                token_count=8,
+                source="user_001",
+                metadata={"user_name": "张三"},
+            ),
+            ContextMessage(
+                role="user",
+                content="[图:一只橘猫] 好可爱",
+                timestamp=datetime.now(),
+                token_count=8,
+                source="user_001",
+                metadata={"user_name": "张三"},
+            ),
+        ]
+
+        result = Summarizer._format_messages(messages)
+
+        assert "[IMG:" not in result
+        assert "[图片]" in result
+        assert "[图:一只橘猫]" in result
+
 
 class TestSegmentedQueueSummarization:
     def test_queue_full_triggers_summarize(self):

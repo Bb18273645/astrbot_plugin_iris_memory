@@ -210,15 +210,33 @@ confidence 与 importance 只能是 high/medium/low。仅提取"需要总结的�
         """
         formatted = []
         for msg in messages:
+            content = Summarizer._clean_image_placeholders(msg.content)
             if msg.role == "user":
                 user_name = msg.metadata.get("user_name") if msg.metadata else None
                 if user_name:
-                    formatted.append(f"[{user_name}]: {msg.content}")
+                    formatted.append(f"[{user_name}]: {content}")
                 else:
-                    formatted.append(f"[用户]: {msg.content}")
+                    formatted.append(f"[用户]: {content}")
             else:
-                formatted.append(f"[助手]: {msg.content}")
+                formatted.append(f"[助手]: {content}")
         return "\n".join(formatted)
+
+    @staticmethod
+    def _clean_image_placeholders(content: str) -> str:
+        """把未解析的图片占位符替换成中性标记。
+
+        摘要可能早于图片解析完成，``[IMG:abc123]`` 这类占位符没有语义，
+        直接进总结会污染 L2 记忆；已解析的描述 ``[图:...]`` 保留原样。
+
+        Args:
+            content: 原始消息内容
+
+        Returns:
+            清理后的消息内容
+        """
+        if not content or "[IMG:" not in content:
+            return content or ""
+        return re.sub(r"\[IMG:[^\]]*\]", "[图片]", content)
 
 
 def _strip_code_fences(text: str) -> str:

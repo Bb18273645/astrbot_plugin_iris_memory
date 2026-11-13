@@ -954,6 +954,11 @@ async def _parse_images_if_enabled(
             session_id, placeholder, f"[图:{result.content}]"
         )
 
+        # 图片描述同时写入 L2 长期记忆，后续可被语义检索
+        from ..image.memory_bridge import store_image_memory
+
+        await store_image_memory(component_manager, event, img_item, result.content)
+
         success_count += 1
 
     # 退还解析失败的预扣配额，避免静默耗尽
