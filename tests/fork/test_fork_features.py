@@ -43,6 +43,17 @@ def test_image_backfill_is_wired():
     assert "_get_inline_image_desc(" in l1_collect, "L1 上下文没有使用行内图片描述"
 
 
+def test_current_turn_image_context_is_wired():
+    source = _read(REQUEST_HOOK)
+    assert (
+        "async def _collect_current_turn_image_context(" in source
+    ), "本轮图片上下文函数被删除了"
+    preprocess = _function_body(source, "async def preprocess_llm_request(")
+    assert (
+        "_collect_current_turn_image_context(" in preprocess
+    ), "本轮图片上下文没有接入请求预处理"
+
+
 def test_l1_dedupe_is_wired():
     source = _read(REQUEST_HOOK)
     assert "def _dedupe_l1_messages(" in source, "L1 重复回复去重函数被删除了"

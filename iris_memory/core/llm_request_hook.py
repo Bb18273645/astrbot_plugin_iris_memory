@@ -217,6 +217,7 @@ async def preprocess_llm_request(
     preprocess_started = time.perf_counter()
     inject_meta: dict = {
         "image": {},
+        "image_context": {},
         "l1": {},
         "profile": {},
         "l2": {},
@@ -227,6 +228,22 @@ async def preprocess_llm_request(
     image_started = time.perf_counter()
     _schedule_related_image_parse(event, req, component_manager, inject_meta["image"])
     inject_meta["image"]["duration_ms"] = _elapsed_ms(image_started)
+
+    # 本轮图片上下文：与 L1 并行收集，最多等待 image_current_turn_wait_ms
+    image_context_task = asyncio.create_task(
+        _run_stage(
+            "image_context",
+            inject_meta["image_context"],
+            _collect_current_turn_image_context(
+                event,
+                req,
+                component_manager,
+                meta=inject_meta["image_context"],
+                completion=inject_meta["image"].get("completion"),
+            ),
+            "",
+        )
+    )
 
     user_message = ""
     if hasattr(event, "message_str") and event.message_str:
@@ -285,11 +302,22 @@ async def preprocess_llm_request(
         )
 
     l3_task = asyncio.create_task(collect_l3_after_l2())
-    l1_text, profile_text, l2_pair, l3_text, learning_text = await asyncio.gather(
-        l1_task, profile_task, l2_task, l3_task, learning_task
+    l1_text, profile_text, l2_pair, l3_text, learning_text, image_text = (
+        await asyncio.gather(
+            l1_task,
+            profile_task,
+            l2_task,
+            l3_task,
+            learning_task,
+            image_context_task,
+        )
     )
     l2_text, _l2_results = l2_pair
     total_duration_ms = _elapsed_ms(preprocess_started)
+
+    # 本轮图片描述放在 L1 段最前面：它是当前消息的一部分，优先级最高
+    if image_text:
+        l1_text = f"{image_text}\n\n{l1_text}" if l1_text else image_text
 
     l1_text, profile_text, l2_text, l3_text, learning_text, budget_meta = (
         _apply_request_budget(
@@ -420,6 +448,8 @@ def _schedule_related_image_parse(
                 return
             meta["background_scheduled"] = True
             meta["blocking"] = False
+            # 暴露完成信号，供本轮图片上下文在有限时间内等待解析结果
+            meta["completion"] = completion
             return
 
         task = asyncio.create_task(runner(), name="iris-related-image-parse")
@@ -427,6 +457,7 @@ def _schedule_related_image_parse(
         task.add_done_callback(_IMAGE_BACKGROUND_TASKS.discard)
         meta["background_scheduled"] = True
         meta["blocking"] = False
+        meta["task"] = task
     except Exception as exc:
         meta["error"] = str(exc)
         logger.error(f"调度后台图片解析失败：{exc}", exc_info=True)
@@ -521,7 +552,15 @@ def _record_injection_log(
             image=image_meta,
             stage_timings_ms={
                 stage: round(float(meta.get(stage, {}).get("duration_ms", 0.0)), 2)
-                for stage in ("image", "l1", "profile", "l2", "l3", "learning")
+                for stage in (
+                "image",
+                "image_context",
+                "l1",
+                "profile",
+                "l2",
+                "l3",
+                "learning",
+            )
             },
             total_duration_ms=round(total_duration_ms, 2),
             content=combined,
@@ -792,6 +831,141 @@ def _get_inline_image_desc(
 
     parts = "；".join(descs)
     return f" [图:{parts}]"
+
+
+async def _collect_current_turn_image_context(
+    event: "AstrMessageEvent",
+    req: "ProviderRequest",
+    component_manager: "ComponentManager",
+    meta: Optional[dict] = None,
+    completion: Any = None,
+) -> str:
+    """收集本轮消息里图片的解析结果，供当前 LLM 上下文使用。
+
+    图片解析在后台进行，本函数只等待有限时间（``image_current_turn_wait_ms``），
+    拿到缓存中的描述就格式化成本轮上下文；超时则按配置给出“用户发了图片”的提示，
+    绝不阻塞主流程等待完整解析。
+
+    Args:
+        event: AstrBot 消息事件对象
+        req: LLM 提供者请求对象
+        component_manager: 组件管理器实例
+        meta: 可选的运行日志元信息字典
+        completion: 后台图片解析的完成信号（事件或任务），可为空
+
+    Returns:
+        格式化后的本轮图片上下文，无图片或未启用时返回空字符串
+    """
+    from ..config import get_config
+    from ..platform import get_adapter
+
+    config = get_config()
+    if not config.get("l1_buffer.image_parsing.enable"):
+        return ""
+    if not config.get("image_current_turn_enable", True):
+        return ""
+    if config.get("image_skip_on_passive_trigger", True) and _is_passive_trigger(
+        event
+    ):
+        if meta is not None:
+            meta["skipped"] = "passive_trigger"
+        return ""
+
+    adapter = get_adapter(event)
+    try:
+        images = adapter.get_images(event)
+    except Exception as exc:
+        logger.debug(f"读取本轮图片失败（已忽略）：{exc}")
+        return ""
+    if not images:
+        return ""
+
+    image_count = len(images)
+    max_images = max(1, int(config.get("image_current_turn_max_images", 3) or 3))
+    max_chars = int(config.get("image_current_turn_max_chars", 400) or 0)
+    wait_ms = max(0, int(config.get("image_current_turn_wait_ms", 3000) or 0))
+
+    buffer = component_manager.get_available_component("l1_buffer")
+    if not buffer:
+        return ""
+
+    session_id = adapter.get_session_id(event)
+
+    # 只等有限时间：超时就直接降级，不取消后台任务
+    waiter = completion
+    if waiter is None:
+        try:
+            candidate = event.get_extra(_IMAGE_QUEUE_TASK_EXTRA)
+        except Exception:
+            candidate = None
+        if isinstance(candidate, (asyncio.Future, asyncio.Event)):
+            waiter = candidate
+    if waiter is not None and wait_ms > 0:
+        try:
+            if isinstance(waiter, asyncio.Event):
+                await asyncio.wait_for(waiter.wait(), timeout=wait_ms / 1000.0)
+            else:
+                await asyncio.wait_for(
+                    asyncio.shield(waiter), timeout=wait_ms / 1000.0
+                )
+        except asyncio.TimeoutError:
+            logger.debug(f"本轮图片解析等待超时（{wait_ms}ms），使用已有结果")
+        except Exception as exc:
+            logger.debug(f"等待本轮图片解析失败（已忽略）：{exc}")
+
+    raw = adapter.get_raw_message(event) or {}
+    message_id = str(raw.get("message_id") or "")
+
+    try:
+        items = list(buffer.get_images(session_id, only_pending=False))
+    except Exception:
+        items = []
+    if message_id:
+        items = [
+            item
+            for item in items
+            if str(getattr(item, "message_id", "") or "") == message_id
+        ]
+    items = items[:max_images]
+
+    cache = component_manager.get_available_component("image_cache")
+    descriptions: list[str] = []
+    for item in items:
+        description = ""
+        if cache is not None and getattr(cache, "is_available", False):
+            try:
+                cached = await cache.get_cache(item.image_hash)
+            except Exception:
+                cached = None
+            if cached is not None and getattr(cached, "content", ""):
+                description = str(cached.content).strip()
+        if not description:
+            continue
+        if max_chars > 0 and len(description) > max_chars:
+            description = description[:max_chars] + "…"
+        descriptions.append(description)
+
+    if meta is not None:
+        meta["image_count"] = image_count
+        meta["described"] = len(descriptions)
+        meta["wait_ms"] = wait_ms
+
+    if not descriptions:
+        if config.get("image_current_turn_hint_enable", True):
+            return (
+                f"【本轮图片】用户在本轮消息中发送了 {image_count} 张图片，"
+                "图片解析结果尚未就绪；请先结合文字内容回复，"
+                "不要凭空描述图片内容。"
+            )
+        return ""
+
+    lines = [
+        f"【本轮图片】用户在本轮消息中发送了 {image_count} 张图片，"
+        "以下是图片解析结果（用于理解图片内容）："
+    ]
+    for index, description in enumerate(descriptions, 1):
+        lines.append(f"- 图{index}: [图:{description}]")
+    return "\n".join(lines)
 
 
 def _dedupe_l1_messages(messages: list["ContextMessage"]) -> tuple[list, int]:

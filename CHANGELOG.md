@@ -5,6 +5,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **本轮图片上下文**：当前消息里图片的解析结果会注入本轮 LLM 请求，bot 在收到图片的当轮就能据此理解和作答。默认最多等待 `image_current_turn_wait_ms`（3000ms）取解析结果，超时不阻塞主流程、不取消后台解析；仍未就绪时按 `image_current_turn_hint_enable` 给出「用户发送了图片」的提示，避免模型凭空描述。条数与长度分别由 `image_current_turn_max_images`（默认 3）和 `image_current_turn_max_chars`（默认 400）控制，`image_current_turn_enable` 可整体关闭。
+
 ### Fixed
 
 - **统一上下文预算**：`token_budget_max_tokens` 现在同时约束当前输入、L1、L2、画像、L3 和学习上下文，按 50/25/10/10/5 的比例自适应裁剪，避免各段单独受限但总和撑爆上下文窗口。

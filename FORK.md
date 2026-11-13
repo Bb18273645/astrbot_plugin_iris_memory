@@ -35,6 +35,7 @@ git config core.hooksPath .githooks           # 启用推送前守卫
 | --- | --- | --- |
 | 统一上下文预算（`token_budget_max_tokens` 约束当前输入与全部动态上下文） | `iris_memory/core/llm_request_hook.py` `_apply_request_budget` | `test_shared_request_budget_is_wired` |
 | 图片描述回填（占位符缺失时用缓存补 `[图:描述]`） | `_build_image_map` / `_get_inline_image_desc` 接入 `_collect_l1_context` | `test_image_backfill_is_wired` |
+| 本轮图片上下文（当前消息的图片描述注入本轮请求，限时等待、超时降级） | `_collect_current_turn_image_context` + `preprocess_llm_request` | `test_current_turn_image_context_is_wired` |
 | 重复回复去重（相邻重复 Bot 回复、同事件相同响应） | `_dedupe_l1_messages`、`llm_response_hook.py` | `test_l1_dedupe_is_wired` / `test_response_dedupe_is_present` |
 | 插件源指向本仓库 | `metadata.yaml` `repo` | `test_metadata_points_to_this_fork` |
 

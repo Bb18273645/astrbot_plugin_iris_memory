@@ -11,6 +11,7 @@ from astrbot_plugin_iris_memory.iris_memory.l1_buffer.models import ContextMessa
 from astrbot_plugin_iris_memory.iris_memory.core.llm_request_hook import (
     _apply_request_budget,
     _build_image_map,
+    _collect_current_turn_image_context,
     _collect_l1_context,
     _get_inline_image_desc,
     _has_memory_retrieval_intent,
@@ -1247,3 +1248,105 @@ class TestL1ImageAndDedupInjection:
             text = await _collect_l1_context(event, req, component_manager)
 
         assert text.count("这是重复的长回复内容") == 1
+
+
+class TestCurrentTurnImageContext:
+    """本轮消息图片进入当前上下文的回归测试。"""
+
+    @staticmethod
+    def _image_config(**overrides):
+        values = {
+            "l1_buffer.image_parsing.enable": True,
+            "image_skip_on_passive_trigger": False,
+            "image_current_turn_enable": True,
+            "image_current_turn_wait_ms": 0,
+            "image_current_turn_max_images": 3,
+            "image_current_turn_max_chars": 400,
+            "image_current_turn_hint_enable": True,
+        }
+        values.update(overrides)
+        config = MagicMock()
+        config.get.side_effect = lambda key, default=None: values.get(key, default)
+        return config
+
+    @staticmethod
+    def _adapter(images, message_id="m1"):
+        adapter = MagicMock()
+        adapter.get_images.return_value = images
+        adapter.get_session_id.return_value = "private:user-1"
+        adapter.get_raw_message.return_value = {"message_id": message_id}
+        return adapter
+
+    @pytest.mark.asyncio
+    async def test_cached_description_is_injected(self):
+        event = MagicMock()
+        event.get_extra.return_value = None
+        buffer = MagicMock()
+        buffer.get_images.return_value = [
+            MagicMock(message_id="m1", image_hash="hash-1")
+        ]
+        cache = MagicMock()
+        cache.is_available = True
+        cache.get_cache = AsyncMock(
+            return_value=MagicMock(content="一只橘猫坐在键盘上")
+        )
+        component_manager = MagicMock()
+        component_manager.get_available_component.side_effect = lambda name: {
+            "l1_buffer": buffer,
+            "image_cache": cache,
+        }.get(name)
+
+        with (
+            patch(_ADAPTER_PATCH, return_value=self._adapter([MagicMock()])),
+            patch(_GET_CONFIG_PATCH, return_value=self._image_config()),
+        ):
+            text = await _collect_current_turn_image_context(
+                event, MagicMock(), component_manager
+            )
+
+        assert "1 张图片" in text
+        assert "[图:一只橘猫坐在键盘上]" in text
+
+    @pytest.mark.asyncio
+    async def test_pending_image_yields_hint_instead_of_blocking(self):
+        event = MagicMock()
+        event.get_extra.return_value = None
+        buffer = MagicMock()
+        buffer.get_images.return_value = [
+            MagicMock(message_id="m1", image_hash="hash-1")
+        ]
+        cache = MagicMock()
+        cache.is_available = True
+        cache.get_cache = AsyncMock(return_value=None)
+        component_manager = MagicMock()
+        component_manager.get_available_component.side_effect = lambda name: {
+            "l1_buffer": buffer,
+            "image_cache": cache,
+        }.get(name)
+
+        with (
+            patch(_ADAPTER_PATCH, return_value=self._adapter([MagicMock()])),
+            patch(_GET_CONFIG_PATCH, return_value=self._image_config()),
+        ):
+            text = await _collect_current_turn_image_context(
+                event, MagicMock(), component_manager
+            )
+
+        assert "1 张图片" in text
+        assert "尚未就绪" in text
+
+    @pytest.mark.asyncio
+    async def test_without_images_returns_empty(self):
+        event = MagicMock()
+        event.get_extra.return_value = None
+
+        with (
+            patch(_ADAPTER_PATCH, return_value=self._adapter([])),
+            patch(_GET_CONFIG_PATCH, return_value=self._image_config()),
+        ):
+            text = await _collect_current_turn_image_context(
+                event, MagicMock(), MagicMock()
+            )
+
+        assert text == ""
+

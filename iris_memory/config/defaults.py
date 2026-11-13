@@ -655,6 +655,37 @@ class HiddenConfig:
         },
     )
 
+    # 本轮图片上下文：把当前消息里图片的解析结果注入本轮请求
+    image_current_turn_enable: bool = field(
+        default=True,
+        metadata={
+            "description": "把本轮消息图片的描述注入当前 LLM 上下文",
+            "group": "图片处理",
+        },
+    )
+    image_current_turn_wait_ms: int = field(
+        default=3000,
+        metadata={
+            "description": "等待本轮图片解析的最长时间(ms)，超时则跳过；0 不等待",
+            "group": "图片处理",
+        },
+    )
+    image_current_turn_max_images: int = field(
+        default=3,
+        metadata={"description": "本轮最多注入几张图片的描述", "group": "图片处理"},
+    )
+    image_current_turn_max_chars: int = field(
+        default=400,
+        metadata={"description": "单张图片描述的字符上限（0 不截断）", "group": "图片处理"},
+    )
+    image_current_turn_hint_enable: bool = field(
+        default=True,
+        metadata={
+            "description": "本轮图片尚未解析出结果时，是否提示模型“用户发了图片”",
+            "group": "图片处理",
+        },
+    )
+
     # 图片去重参数
     image_phash_enable: bool = field(
         default=True,
