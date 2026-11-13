@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **图片长期记忆**：图片解析成功后，除了进入 L1，还会把描述作为一条记忆写入 L2（内容形如「图片记忆：<用户> 发送了一张图片，画面内容：…」，metadata 带 `image_hash`/`session_id`/`message_id`），以后可以用「之前那张图」这类问题检索到。`image_memory_enable` 控制开关，`image_memory_max_chars` 控制写入长度；每张新图片会产生一次嵌入调用。
-- **图片记忆去重与过期**：写入前扫描最近 `image_memory_dedupe_scan`（默认 500）条记忆，同一 `image_hash` 不重复写入；`image_memory_retention_days`（默认 30，0 表示永久）会给图片记忆设置 `expires_at`，由梦境周期的 `purge_expired_memories()` 清理。
-- **最近图片工具**：新增 LLM Tool `get_recent_images(limit, days)`，用户问「我之前发的那张图」「最近有什么图片」时，按时间倒序返回图片发送时间与画面描述，只读图片记忆、无副作用。
+- **Telegram 平台适配器**：Telegram 没有专用适配器时，图片、引用消息和消息 ID 全部走通用降级分支——`get_images()` 返回空、`get_raw_message()` 没有 `message_id`。现在新增 `TelegramAdapter`：从 `Update` 提取图片 `file_id`、在异步阶段用 Bot API 下载到插件图片缓存目录，再进入统一图片链路；同时补全 `message_id`、引用消息解析和发送者信息。Telegram 上的图片解析、本轮图片上下文、图片长期记忆由此一次性可用。
+- **平台图片预处理接口**：`PlatformAdapter.prepare_images()` 默认直接返回 `get_images()`；需要下载的平台（Telegram）在异步阶段把图片落到本地文件，图片解析的可用性判断从「有 URL」放宽为「有 URL 或本地文件」。
+- **图片长期记忆**：图片解析成功后，除了进入 L1，还会把描述作为一条记忆写入 L2（内容形如「图片记忆：<用户> 发送了一张图片，画面内容：…」，metadata 带 `image_hash`/`session_id`/`group_id`/`message_id`），以后可以用「之前那张图」这类问题检索到。`image_memory_enable` 控制开关，`image_memory_max_chars` 控制写入长度；每张新图片会产生一次嵌入调用。
+- **图片记忆去重与过期**：写入前用 L2 的精确查询按 `image_hash` 去重（不再拉取最近 500 条逐条解析 JSON）；`image_memory_retention_days`（默认 30，0 表示永久）会给图片记忆设置 `expires_at`，由梦境周期的 `purge_expired_memories()` 清理。
+- **最近图片工具**：新增 LLM Tool `get_recent_images(limit, days)`，用户问「我之前发的那张图」「最近有什么图片」时，按时间倒序返回图片发送时间与画面描述；只返回当前会话/当前群的图片，`days` 收敛到 0–3650，`null`/非法值回落到默认 7 天。
 - **本轮图片上下文**：当前消息里图片的解析结果会注入本轮 LLM 请求，bot 在收到图片的当轮就能据此理解和作答。默认最多等待 `image_current_turn_wait_ms`（3000ms）取解析结果，超时不阻塞主流程、不取消后台解析；仍未就绪时按 `image_current_turn_hint_enable` 给出「用户发送了图片」的提示，避免模型凭空描述。条数与长度分别由 `image_current_turn_max_images`（默认 3）和 `image_current_turn_max_chars`（默认 400）控制，`image_current_turn_enable` 可整体关闭。
 
 ### Fixed
 
+- **本轮图片上下文不再串图**：拿不到消息 ID 时不再回退到「所有待解析图片」，避免把上一轮未解析的图片当成这一轮的图片注入。
 - **摘要图片占位符**：L1 摘要可能早于图片解析完成，生成摘要前把未解析的 `[IMG:hash]` 占位符替换为 `[图片]`，避免哈希碎片进入 L2 记忆；已解析的 `[图:描述]` 保留原样。
 
 - **统一上下文预算**：`token_budget_max_tokens` 现在同时约束当前输入、L1、L2、画像、L3 和学习上下文，按 50/25/10/10/5 的比例自适应裁剪，避免各段单独受限但总和撑爆上下文窗口。
