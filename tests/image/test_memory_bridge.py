@@ -34,10 +34,11 @@ def _component_manager(l2_memory):
     return manager
 
 
-def _l2_memory(existing=None, memory_id="mem_123"):
+def _l2_memory(memory_id="mem_123", existing_id=None):
     l2_memory = MagicMock()
     l2_memory.add_memory = AsyncMock(return_value=memory_id)
-    l2_memory.get_latest_memories = AsyncMock(return_value=existing or [])
+    l2_memory.get_latest_memories = AsyncMock(return_value=[])
+    l2_memory.find_memory_id_by_metadata = AsyncMock(return_value=existing_id)
     return l2_memory
 
 
@@ -49,18 +50,13 @@ def _item(image_hash="ph:abcdef012345"):
     return item
 
 
-def _recent_entry(image_hash):
-    result = MagicMock()
-    result.entry = MagicMock()
-    result.entry.metadata = {"type": "image", "image_hash": image_hash}
-    result.entry.content = "图片记忆：user-1 发送了一张图片"
-    return result
-
-
-def _adapter():
+def _adapter(group_id=""):
     adapter = MagicMock()
-    adapter.get_session_id.return_value = "private:user-1"
+    adapter.get_session_id.return_value = (
+        f"group:{group_id}" if group_id else "private:user-1"
+    )
     adapter.get_user_id.return_value = "user-1"
+    adapter.get_group_id.return_value = group_id
     return adapter
 
 
@@ -85,12 +81,29 @@ async def test_image_description_is_written_to_l2():
     assert metadata["type"] == "image"
     assert metadata["image_hash"] == "ph:abcdef012345"
     assert metadata["session_id"] == "private:user-1"
+    assert metadata["group_id"] == ""
     assert l2_memory.add_memory.await_args.kwargs["persona_id"] == "default"
 
 
 @pytest.mark.asyncio
+async def test_group_id_is_recorded_for_group_chats():
+    l2_memory = _l2_memory()
+    manager = _component_manager(l2_memory)
+
+    with (
+        patch(_CONFIG_PATCH, return_value=_config()),
+        patch(_ADAPTER_PATCH, return_value=_adapter(group_id="-100123")),
+        patch(_PERSONA_PATCH, new_callable=AsyncMock, return_value="default"),
+    ):
+        await store_image_memory(manager, MagicMock(), _item(), "群里的图")
+
+    metadata = l2_memory.add_memory.await_args.args[1]
+    assert metadata["group_id"] == "-100123"
+
+
+@pytest.mark.asyncio
 async def test_same_image_is_not_written_twice():
-    l2_memory = _l2_memory(existing=[_recent_entry("ph:abcdef012345")])
+    l2_memory = _l2_memory(existing_id="mem_existing")
     manager = _component_manager(l2_memory)
 
     with (
@@ -101,6 +114,7 @@ async def test_same_image_is_not_written_twice():
         ok = await store_image_memory(manager, MagicMock(), _item(), "一只橘猫")
 
     assert ok is True
+    l2_memory.find_memory_id_by_metadata.assert_awaited()
     l2_memory.add_memory.assert_not_awaited()
 
 

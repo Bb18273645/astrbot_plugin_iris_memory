@@ -64,21 +64,33 @@ async def store_image_memory(
         persona_id = await resolve_persona(component_manager, event)
         image_hash = str(getattr(img_item, "image_hash", "") or "")
 
-        # 同一张图不重复写记忆：先扫描最近的记忆条目做 image_hash 去重
-        dedupe_scan = int(config.get("image_memory_dedupe_scan", 500) or 0)
-        if dedupe_scan > 0 and image_hash:
-            recent = await l2_memory.get_latest_memories(
-                limit=dedupe_scan,
-                persona_id=persona_id,
-            )
-            for result in recent:
-                metadata = result.entry.metadata or {}
-                if metadata.get("image_hash") == image_hash:
-                    logger.debug(f"图片记忆已存在，跳过：{image_hash[:16]}…")
-                    return True
+        # 同一张图不重复写记忆：优先用 L2 的精确查询，旧适配器回退到扫描
+        if image_hash:
+            existing_id = None
+            finder = getattr(l2_memory, "find_memory_id_by_metadata", None)
+            if callable(finder):
+                existing_id = await finder(
+                    "image_hash", image_hash, persona_id=persona_id
+                )
+            else:
+                dedupe_scan = int(config.get("image_memory_dedupe_scan", 500) or 0)
+                if dedupe_scan > 0:
+                    recent = await l2_memory.get_latest_memories(
+                        limit=dedupe_scan,
+                        persona_id=persona_id,
+                    )
+                    for result in recent:
+                        metadata = result.entry.metadata or {}
+                        if metadata.get("image_hash") == image_hash:
+                            existing_id = result.entry.id
+                            break
+            if existing_id:
+                logger.debug(f"图片记忆已存在，跳过：{image_hash[:16]}…")
+                return True
 
         adapter = get_adapter(event)
         session_id = adapter.get_session_id(event)
+        group_id = adapter.get_group_id(event)
         user_id = str(getattr(img_item, "user_id", "") or "") or adapter.get_user_id(
             event
         )
@@ -91,6 +103,7 @@ async def store_image_memory(
             "source": "image_parse",
             "image_hash": image_hash,
             "session_id": session_id,
+            "group_id": group_id,
             "user_id": user_id,
             "message_id": message_id,
         }
