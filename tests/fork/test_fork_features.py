@@ -6,6 +6,8 @@
 
 from pathlib import Path
 
+import re
+
 ROOT = Path(__file__).resolve().parents[2]
 
 REQUEST_HOOK = "iris_memory/core/llm_request_hook.py"
@@ -135,3 +137,16 @@ def test_response_dedupe_is_present():
 
 def test_metadata_points_to_this_fork():
     assert FORK_REPO in _read(METADATA), "metadata.yaml 的仓库地址被改回了上游"
+
+
+def test_metadata_version_uses_fork_scheme():
+    metadata = _read(METADATA)
+    match = re.search(r"^version:\s*(\S+)", metadata, re.MULTILINE)
+    assert match, "metadata.yaml 缺少 version 字段"
+    version = match.group(1)
+    assert re.fullmatch(r"\d+\.\d{2}(\.\d+)?", version), (
+        f"版本号 {version} 不符合 Fork 规则：功能更新 +0.1（1.00 → 1.10），"
+        "修复 +0.0.1（1.00 → 1.00.1），大版本才进整数位"
+    )
+    assert not version.startswith("3."), "插件版本号不要沿用上游 3.x"
+    assert version in _read("README.md"), "README 没有引用 metadata.yaml 里的当前版本号"

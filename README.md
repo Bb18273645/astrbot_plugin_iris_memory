@@ -13,7 +13,8 @@
 | --- | --- |
 | 上游项目 | [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory)，作者 **Leafiber** |
 | 本仓库 | [Bb18273645/astrbot_plugin_iris_memory](https://github.com/Bb18273645/astrbot_plugin_iris_memory)，**二改（fork）**，非官方、非上游维护 |
-| 当前版本 | `v3.3.0-fork.1`，即上游 `v3.3.0` + 本仓库自有提交 |
+| 当前版本 | **`1.00`**（本仓库版本号，对应上游 `v3.3.0` + 本仓库自有提交） |
+| 版本规则 | 功能更新 `+0.1`（`1.00 → 1.10`），缺陷修复 `+0.0.1`（`1.00 → 1.00.1`），只有大版本才进整数位（`2.00`）；详见 [FORK.md](./FORK.md#版本规则) |
 | 版权与许可 | 原始代码版权归原作者 **Leafiber** 所有；沿用上游 **AGPL-3.0** 许可，本仓库二改部分同样以 AGPL-3.0 发布 |
 | 与上游的关系 | 补丁栈模式：`master` 的首个父提交永远是某个上游提交，二改内容是其上的独立提交；上游发版后用 rebase 重放，冲突只出现在自有提交里 |
 | 详细维护方式 | [FORK.md](./FORK.md)：自有功能清单、守卫测试、上游同步与上线流程 |
@@ -341,7 +342,7 @@ python -m pytest -q
 - **上游通用问题**（插件本身的记忆、主动回复、人格迭代行为）：请提到上游仓库 <https://github.com/leafliber/astrbot_plugin_iris_memory/issues>，由原作者处理；
 - **二改相关问题**（统一上下文预算、图片上下文与长期记忆、Telegram 适配器、错误友好化严格匹配等）：提到本仓库 Issue。
 
-请在问题描述中附上 AstrBot 版本、插件版本（`v3.3.0-fork.1`）、关键配置和脱敏后的日志。
+请在问题描述中附上 AstrBot 版本、插件版本（`1.00`）、关键配置和脱敏后的日志。
 
 ## 许可证与版权
 

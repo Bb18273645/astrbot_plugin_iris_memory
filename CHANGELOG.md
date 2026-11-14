@@ -5,6 +5,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+（暂无）
+
+## [1.00] - 2026-11-14
+
+首个二改版本号：上游 `v3.3.0` + 本仓库全部自有提交（即本版本下的所有条目）。插件版本号由 `v3.3.0-fork.1` 改为 `1.00`，并确立版本规则（功能更新 `+0.1`、修复 `+0.0.1`、大版本才进整数位，详见 [FORK.md](./FORK.md#版本规则)）。
+
 ### Added
 
 - **Telegram 平台适配器**：Telegram 没有专用适配器时，图片、引用消息和消息 ID 全部走通用降级分支——`get_images()` 返回空、`get_raw_message()` 没有 `message_id`。现在新增 `TelegramAdapter`：从 `Update` 提取图片 `file_id`、在异步阶段用 Bot API 下载到插件图片缓存目录，再进入统一图片链路；同时补全 `message_id`、引用消息解析和发送者信息。Telegram 上的图片解析、本轮图片上下文、图片长期记忆由此一次性可用。

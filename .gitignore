@@ -236,3 +236,8 @@ pnpm-debug.log*
 *.local
 AGENTS.md
 CLAUDE.md
+
+# 测试运行时产物（pytest 在本仓库根目录留下的临时目录与缓存）
+/pytest-of-*/
+/tmp*/
+/data-gym-cache/

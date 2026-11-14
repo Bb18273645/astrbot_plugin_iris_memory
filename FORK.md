@@ -45,6 +45,7 @@ git config core.hooksPath .githooks           # 启用推送前守卫
 | 摘要前清理未解析图片占位符 | `Summarizer._clean_image_placeholders` | `test_summary_strips_image_placeholders` |
 | 重复回复去重（相邻重复 Bot 回复、同事件相同响应） | `_dedupe_l1_messages`、`llm_response_hook.py` | `test_l1_dedupe_is_wired` / `test_response_dedupe_is_present` |
 | 插件源指向本仓库 | `metadata.yaml` `repo` | `test_metadata_points_to_this_fork` |
+| 版本号规则（`1.00` / 功能 `+0.1` / 修复 `+0.0.1`，且 README 同步引用） | `metadata.yaml` `version` | `test_metadata_version_uses_fork_scheme` |
 
 新增自有功能时：
 
@@ -93,6 +94,22 @@ git push --force-with-lease origin master:my-fixes
 - **禁止**用 `git checkout --theirs <文件>` 或整份文件取上游的做法收尾；
 - 冲突解决后必须让 `pytest tests/fork -q` 通过，再跑一次完整测试；
 - 若上游已实现相同功能，先确认行为等价再删除自己的实现，并同步删掉对应守卫。
+
+## 版本规则
+
+本仓库使用**自己的版本号**，与上游版本号解耦；唯一来源是 `metadata.yaml` 的 `version` 字段：
+
+| 变更类型 | 版本变化 | 示例 |
+| --- | --- | --- |
+| 功能更新（新增能力、行为增强） | 小版本 `+0.1` | `1.00 → 1.10 → 1.20` |
+| 缺陷修复（不改变用法） | 修订 `+0.0.1` | `1.00 → 1.00.1 → 1.00.2` |
+| 大版本（重构、不兼容变更） | 整数位 +1 | `1.00 → 2.00` |
+
+约定：
+
+- 每次发布**只升一次**版本号，并在 `CHANGELOG.md` 写 `## [<version>] - YYYY-MM-DD`；
+- 单纯合入上游（rebase 重放）**不升**版本号，只有自有改动才升；
+- 版本号只写在 `metadata.yaml`，README、CHANGELOG 引用同一数字，不再出现上游版本号当作插件版本。
 
 ## 上线
 
