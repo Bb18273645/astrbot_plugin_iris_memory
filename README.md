@@ -2,7 +2,7 @@
 > 面向 AstrBot 的轻量化三合一智能陪伴插件：记忆、主动回复、人格自学习迭代。
 
 [![AstrBot Plugin](https://img.shields.io/badge/AstrBot-Plugin-6f42c1)](https://github.com/AstrBotDevs/AstrBot)
-[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](#许可证)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](#许可证与版权)
 [![Fork](https://img.shields.io/badge/fork-leafliber%2Fastrbot__plugin__iris__memory-blue)](https://github.com/leafliber/astrbot_plugin_iris_memory)
 
 > **本仓库是二改（fork）版本，不是官方版本。** 上游项目为 [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory)，原作者 **Leafiber**。原始代码版权归原作者所有，本仓库保留其署名与 AGPL-3.0 许可；本仓库仅在上游之上补充自用修复与功能。
