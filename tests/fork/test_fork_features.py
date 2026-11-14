@@ -143,7 +143,12 @@ def test_metadata_version_uses_fork_scheme():
     metadata = _read(METADATA)
     match = re.search(r"^version:\s*(\S+)", metadata, re.MULTILINE)
     assert match, "metadata.yaml 缺少 version 字段"
-    version = match.group(1)
+    raw = match.group(1)
+    version = raw.strip("\"'")
+    assert raw[:1] in "\"'", (
+        "version 必须加引号：YAML 会把 1.00 解析成浮点数 1.0，"
+        "AstrBot 更新时校验「version 必须是非空字符串」会直接失败"
+    )
     assert re.fullmatch(r"\d+\.\d{2}(\.\d+)?", version), (
         f"版本号 {version} 不符合 Fork 规则：功能更新 +0.1（1.00 → 1.10），"
         "修复 +0.0.1（1.00 → 1.00.1），大版本才进整数位"
