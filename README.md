@@ -3,6 +3,35 @@
 
 [![AstrBot Plugin](https://img.shields.io/badge/AstrBot-Plugin-6f42c1)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](#许可证)
+[![Fork](https://img.shields.io/badge/fork-leafliber%2Fastrbot__plugin__iris__memory-blue)](https://github.com/leafliber/astrbot_plugin_iris_memory)
+
+> **本仓库是二改（fork）版本，不是官方版本。** 上游项目为 [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory)，原作者 **Leafiber**。原始代码版权归原作者所有，本仓库保留其署名与 AGPL-3.0 许可；本仓库仅在上游之上补充自用修复与功能。
+
+## 关于本仓库（二改说明）
+
+| 项目 | 说明 |
+| --- | --- |
+| 上游项目 | [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory)，作者 **Leafiber** |
+| 本仓库 | [Bb18273645/astrbot_plugin_iris_memory](https://github.com/Bb18273645/astrbot_plugin_iris_memory)，**二改（fork）**，非官方、非上游维护 |
+| 当前版本 | `v3.3.0-fork.1`，即上游 `v3.3.0` + 本仓库自有提交 |
+| 版权与许可 | 原始代码版权归原作者 **Leafiber** 所有；沿用上游 **AGPL-3.0** 许可，本仓库二改部分同样以 AGPL-3.0 发布 |
+| 与上游的关系 | 补丁栈模式：`master` 的首个父提交永远是某个上游提交，二改内容是其上的独立提交；上游发版后用 rebase 重放，冲突只出现在自有提交里 |
+| 详细维护方式 | [FORK.md](./FORK.md)：自有功能清单、守卫测试、上游同步与上线流程 |
+
+除本仓库新增的部分外，插件的能力、配置项与数据结构**以上游文档为准**；本仓库不重写上游实现，也不打算取代上游。遇到问题请先对照上游最新版本与 [上游 Issue](https://github.com/leafliber/astrbot_plugin_iris_memory/issues) 确认是否已修复。
+
+### 本仓库相对上游的改动（摘要）
+
+| 类别 | 内容 |
+| --- | --- |
+| 上下文 | 统一 token 预算（`token_budget_max_tokens` 约束当前输入与 L1/L2/画像/L3/学习），相邻重复回复去重，摘要前清理未解析的图片占位符 |
+| 图片 | 本轮图片描述注入、图片描述写入 L2 长期记忆（按会话隔离、精确去重、TTL）、`get_recent_images` 工具、占位符缺失时的缓存回填 |
+| 平台 | Telegram 专用适配器：图片下载与解析、引用消息还原、`message_id`，替代原先的通用降级 |
+| 稳定性 | 错误友好化严格判定，不再把含 API/错误字样的正常回复替换成友好提示；拦截时记录原始错误 |
+
+完整清单、守卫断言与实现位置见 [FORK.md](./FORK.md)；本仓库向上游提交的问题见 [Issue #50–#56](https://github.com/leafliber/astrbot_plugin_iris_memory/issues)。
+
+---
 
 Iris Memory 用一个插件完成三件彼此关联的事：让机器人长期记住用户和群聊、在合适的时机自然参与对话，并从真实交流中安全地迭代指定 Persona。所有核心数据默认落在本地，昂贵模型调用前都有本地门控、增量判断或批处理。
 
@@ -37,11 +66,17 @@ Iris Memory 用一个插件完成三件彼此关联的事：让机器人长期�
 
 - **aiocqhttp（QQ 个人号 / OneBot11）**：全功能支持。
 - **qq_official / qq_official_webhook（QQ 官方机器人）**：支持 L1 缓冲、引用消息、图片记忆与频道 @ 提取。受 QQ 开放平台隐私设计限制：群聊/单聊不提供用户昵称与群名称（说话人以 openid 派生的稳定标签如 `成员_a3f2` 标识）；群聊中被 @ 的其他用户不透出；不支持合并转发解析；同一用户在群、单聊、频道是三个互不关联的身份，记忆与画像按场景自然隔离。主动回复受平台频控约束（被动回复有效期 5 分钟，主动消息额度约 4 条/用户/月）。
-- **其他平台（telegram、webchat、wecom 等）**：经通用适配器降级，基础记忆（用户/会话识别）可用，引用、图片、@ 等平台特性不可用。
+- **telegram**：上游按通用适配器降级；**本仓库已补充专用 `TelegramAdapter`**，支持图片下载与解析、引用消息还原和 `message_id`，图片记忆与 `get_recent_images` 可用（见上方[二改说明](#关于本仓库二改说明)）。
+- **其他平台（webchat、wecom 等）**：经通用适配器降级，基础记忆（用户/会话识别）可用，引用、图片、@ 等平台特性不可用。
 
 ## 安装
 
-在 AstrBot 插件市场安装 Iris Memory，或将本仓库放入 AstrBot 插件目录，然后重启 AstrBot。
+本仓库是二改版本，**不在 AstrBot 插件市场的官方条目里**。安装方式二选一：
+
+1. 在 AstrBot 面板的插件页添加仓库地址 `https://github.com/Bb18273645/astrbot_plugin_iris_memory`，安装后按面板提示重载；
+2. 或将本仓库克隆到 AstrBot 的 `data/plugins/` 目录下，然后重启 AstrBot。
+
+需要官方版本时，请改用上游 [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory) 或插件市场中的官方发布。
 
 插件会自动安装以下核心依赖：
 
@@ -294,16 +329,28 @@ python -m pytest -q
 
 ## 文档
 
+- [Fork 维护说明（二改功能清单、上游同步）](./FORK.md)
 - [更新日志](./CHANGELOG.md)
 - [v2 → v3 迁移指南](./docs/MIGRATION.md)
 - [人格自学习迭代指南](./docs/PERSONA_EVOLUTION.md)
 - [Web 前端开发说明](./iris_memory/web/README.md)
 - [AstrBot 插件开发文档](https://docs.astrbot.app/dev/star/plugin-new.html)
 
-## 贡献
+## 贡献与反馈
 
-欢迎通过 Issue 报告问题或提出建议，也欢迎提交 Pull Request。请在问题描述中附上 AstrBot 版本、插件版本、关键配置和脱敏后的日志。
+- **上游通用问题**（插件本身的记忆、主动回复、人格迭代行为）：请提到上游仓库 <https://github.com/leafliber/astrbot_plugin_iris_memory/issues>，由原作者处理；
+- **二改相关问题**（统一上下文预算、图片上下文与长期记忆、Telegram 适配器、错误友好化严格匹配等）：提到本仓库 Issue。
 
-## 许可证
+请在问题描述中附上 AstrBot 版本、插件版本（`v3.3.0-fork.1`）、关键配置和脱敏后的日志。
 
-本项目采用 AGPL-3.0 许可证。
+## 许可证与版权
+
+本项目采用 **AGPL-3.0** 许可证。
+
+本仓库是 [leafliber/astrbot_plugin_iris_memory](https://github.com/leafliber/astrbot_plugin_iris_memory) 的二改分支：
+
+- **原始代码版权归原作者 Leafiber 所有**，本仓库保留其署名、版权声明与 AGPL-3.0 许可，不作任何形式的闭源或再许可；
+- 本仓库新增/修改的部分（见 [FORK.md](./FORK.md) 功能清单）同样以 AGPL-3.0 发布；
+- 本仓库对上游问题仅以 Issue / 建议形式反馈，不代替原作者对上游项目负责；上游的版本、发布与支持以其原仓库为准。
+
+若你只需要官方版本，请直接使用上游仓库或 AstrBot 插件市场中的官方发布。
